@@ -10,17 +10,16 @@ See SECURITY.md for comprehensive security guidelines.
 import re
 import logging
 import time
+import os
+import tempfile
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from functools import wraps
 from collections import defaultdict
 from threading import Lock
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -28,12 +27,13 @@ logger = logging.getLogger(__name__)
 # Input Validation
 # ============================================================================
 
+
 def validate_string_input(
     value: str,
     max_length: int = 1000,
     min_length: int = 0,
     allowed_pattern: Optional[str] = None,
-    field_name: str = "input"
+    field_name: str = "input",
 ) -> str:
     """
     Validate and sanitize string input.
@@ -71,7 +71,7 @@ def validate_numeric_input(
     value: int,
     min_value: Optional[int] = None,
     max_value: Optional[int] = None,
-    field_name: str = "input"
+    field_name: str = "input",
 ) -> int:
     """
     Validate numeric input.
@@ -106,11 +106,8 @@ def validate_numeric_input(
 # Path Traversal Protection
 # ============================================================================
 
-def validate_safe_path(
-    requested_path: str,
-    allowed_directory: Path,
-    must_exist: bool = False
-) -> Path:
+
+def validate_safe_path(requested_path: str, allowed_directory: Path, must_exist: bool = False) -> Path:
     """
     Validate that a file path is within allowed directory.
 
@@ -153,11 +150,12 @@ def validate_safe_path(
 # Command Injection Protection
 # ============================================================================
 
+
 def validate_safe_command(
     command_name: str,
     args: Optional[List[str]],
     allowed_commands: Dict[str, List[str]],
-    allowed_arg_pattern: Optional[str] = None
+    allowed_arg_pattern: Optional[str] = None,
 ) -> List[str]:
     """
     Validate command against whitelist and check arguments for injection.
@@ -188,14 +186,31 @@ def validate_safe_command(
         # Check for shell metacharacters that could enable injection
         # This is a comprehensive list including glob characters and escape sequences
         dangerous_chars = [
-            ';', '&', '|', '$', '`', '\n', '(', ')', '{', '}',
-            '<', '>', '*', '?', '[', ']', '"', "'", '\\'
+            ";",
+            "&",
+            "|",
+            "$",
+            "`",
+            "\n",
+            "(",
+            ")",
+            "{",
+            "}",
+            "<",
+            ">",
+            "*",
+            "?",
+            "[",
+            "]",
+            '"',
+            "'",
+            "\\",
         ]
 
         # Default pattern: alphanumeric, dash, underscore, dot, slash, space
         # Adjust this pattern based on your specific command's needs
         if allowed_arg_pattern is None:
-            allowed_arg_pattern = r'^[a-zA-Z0-9\-_./ ]+$'
+            allowed_arg_pattern = r"^[a-zA-Z0-9\-_./ ]+$"
 
         for arg in args:
             # Negative validation: check for dangerous characters
@@ -217,6 +232,7 @@ def validate_safe_command(
 # Rate Limiting
 # ============================================================================
 
+
 class RateLimiter:
     """Simple in-memory rate limiter for protecting against high-speed attacks."""
 
@@ -224,12 +240,7 @@ class RateLimiter:
         self.requests = defaultdict(list)
         self.lock = Lock()
 
-    def is_allowed(
-        self,
-        key: str,
-        max_requests: int = 100,
-        window_seconds: int = 60
-    ) -> bool:
+    def is_allowed(self, key: str, max_requests: int = 100, window_seconds: int = 60) -> bool:
         """
         Check if request is within rate limits.
 
@@ -245,16 +256,12 @@ class RateLimiter:
             now = time.time()
 
             # Remove requests outside the current window
-            self.requests[key] = [
-                req_time for req_time in self.requests[key]
-                if now - req_time < window_seconds
-            ]
+            self.requests[key] = [req_time for req_time in self.requests[key] if now - req_time < window_seconds]
 
             # Check if limit exceeded
             if len(self.requests[key]) >= max_requests:
                 logger.warning(
-                    f"Rate limit exceeded for {key}: "
-                    f"{len(self.requests[key])} requests in {window_seconds}s"
+                    f"Rate limit exceeded for {key}: {len(self.requests[key])} requests in {window_seconds}s"
                 )
                 return False
 
@@ -281,25 +288,26 @@ def with_rate_limit(max_requests: int = 100, window_seconds: int = 60):
             # This tool is limited to 50 calls per minute
             pass
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             key = func.__name__
 
             if not _rate_limiter.is_allowed(key, max_requests, window_seconds):
-                raise ValueError(
-                    f"Rate limit exceeded. Maximum {max_requests} requests "
-                    f"per {window_seconds} seconds."
-                )
+                raise ValueError(f"Rate limit exceeded. Maximum {max_requests} requests per {window_seconds} seconds.")
 
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 # ============================================================================
 # Audit Logging
 # ============================================================================
+
 
 def audit_log(func):
     """
@@ -316,17 +324,25 @@ def audit_log(func):
     """
     # Parameter names that should never be logged
     SENSITIVE_PARAM_NAMES = {
-        'password', 'token', 'api_key', 'secret', 'credential',
-        'auth', 'authorization', 'apikey', 'access_token',
-        'refresh_token', 'private_key', 'passphrase'
+        "password",
+        "token",
+        "api_key",
+        "secret",
+        "credential",
+        "auth",
+        "authorization",
+        "apikey",
+        "access_token",
+        "refresh_token",
+        "private_key",
+        "passphrase",
     }
 
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Redact sensitive parameter values
         safe_kwargs = {
-            k: '[REDACTED]' if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100]
-            for k, v in kwargs.items()
+            k: "[REDACTED]" if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100] for k, v in kwargs.items()
         }
 
         # Truncate args to avoid logging large data
@@ -349,6 +365,7 @@ def audit_log(func):
 # Sensitive Data Redaction
 # ============================================================================
 
+
 def redact_sensitive_data(text: str) -> str:
     """
     Redact common sensitive patterns from text.
@@ -366,9 +383,9 @@ def redact_sensitive_data(text: str) -> str:
     """
     patterns = [
         # Email addresses (fixed: [A-Za-z] instead of [A-Z|a-z])
-        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]'),
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL_REDACTED]"),
         # US SSN
-        (r'\b\d{3}-\d{2}-\d{4}\b', '[SSN_REDACTED]'),
+        (r"\b\d{3}-\d{2}-\d{4}\b", "[SSN_REDACTED]"),
         # Credit card numbers (basic pattern - may have false positives)
         # NOTE: This is a simple pattern that matches 16-digit numbers.
         # For production, consider:
@@ -376,17 +393,17 @@ def redact_sensitive_data(text: str) -> str:
         # - Handling 13, 14, 15, and 19-digit card numbers
         # - Being more specific about separators
         # This pattern may match transaction IDs and other non-card numbers.
-        (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', '[CARD_REDACTED]'),
+        (r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", "[CARD_REDACTED]"),
         # API keys (common patterns)
-        (r'api[_-]?key[_-]?[=:]?\s*["\']?([a-zA-Z0-9_\-]{20,})', 'api_key=[REDACTED]'),
+        (r'api[_-]?key[_-]?[=:]?\s*["\']?([a-zA-Z0-9_\-]{20,})', "api_key=[REDACTED]"),
         # Passwords in various formats
-        (r'password[_-]?[=:]?\s*["\']?([^\s"\']+)', 'password=[REDACTED]'),
+        (r'password[_-]?[=:]?\s*["\']?([^\s"\']+)', "password=[REDACTED]"),
         # Stripe-style keys
-        (r'(sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{20,}', '[API_KEY_REDACTED]'),
+        (r"(sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{20,}", "[API_KEY_REDACTED]"),
         # AWS keys
-        (r'AKIA[0-9A-Z]{16}', '[AWS_KEY_REDACTED]'),
+        (r"AKIA[0-9A-Z]{16}", "[AWS_KEY_REDACTED]"),
         # JWT tokens (fixed: use + instead of * to require at least one character)
-        (r'eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+', '[JWT_REDACTED]'),
+        (r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+", "[JWT_REDACTED]"),
         # IP addresses (if you want to redact them)
         # (r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP_REDACTED]'),
     ]
@@ -402,10 +419,11 @@ def redact_sensitive_data(text: str) -> str:
 # Combined Security Wrapper
 # ============================================================================
 
+
 def secure_tool(
     rate_limit_requests: int = 100,
     rate_limit_window: int = 60,
-    enable_audit_log: bool = True
+    enable_audit_log: bool = True,
 ):
     """
     Combined decorator for common security measures.
@@ -423,6 +441,7 @@ def secure_tool(
             # This tool has rate limiting and audit logging
             pass
     """
+
     def decorator(func):
         wrapped = func
 
@@ -434,4 +453,161 @@ def secure_tool(
         wrapped = with_rate_limit(rate_limit_requests, rate_limit_window)(wrapped)
 
         return wrapped
+
     return decorator
+
+
+# ============================================================================
+# Secure Path Validation (without strict directory checking)
+# ============================================================================
+
+
+def validate_project_path(path_str: str, must_exist: bool = True) -> Path:
+    """
+    Validate a project path safely.
+
+    This is less strict than validate_safe_path as it allows paths anywhere
+    on the filesystem, but still prevents common attack vectors.
+
+    Args:
+        path_str: Path string to validate
+        must_exist: Whether the path must already exist
+
+    Returns:
+        Validated absolute Path object
+
+    Raises:
+        ValueError: If path contains suspicious patterns
+        FileNotFoundError: If must_exist=True and path doesn't exist
+    """
+    # Check for null bytes (can cause issues in some contexts)
+    if "\x00" in path_str:
+        raise ValueError("Path contains null bytes")
+
+    # Convert to Path and resolve
+    try:
+        path = Path(path_str).resolve()
+    except (ValueError, OSError) as e:
+        raise ValueError(f"Invalid path: {e}")
+
+    # Check existence if required
+    if must_exist and not path.exists():
+        raise FileNotFoundError(f"Path not found: {path_str}")
+
+    # Warn but don't block suspicious patterns (log for security auditing)
+    if ".." in path_str:
+        logger.info(f"Path contains '..': {path_str}")
+
+    return path
+
+
+# ============================================================================
+# Secure Credential Handling
+# ============================================================================
+
+
+def create_secure_temp_file(content: str, prefix: str = "mcp_") -> Path:
+    """
+    Create a temporary file with restricted permissions for sensitive data.
+
+    Args:
+        content: Content to write to file
+        prefix: Prefix for temp filename
+
+    Returns:
+        Path to created temporary file
+
+    Note:
+        Caller is responsible for deleting the file when done
+    """
+    # Create temp file with 0600 permissions (owner read/write only)
+    fd, temp_path = tempfile.mkstemp(prefix=prefix, suffix=".tmp")
+
+    try:
+        # Write content
+        os.write(fd, content.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+    # Ensure permissions are set correctly (umask might interfere)
+    os.chmod(temp_path, 0o600)
+
+    return Path(temp_path)
+
+
+# ============================================================================
+# Parameter Validation Helpers
+# ============================================================================
+
+
+def validate_track(track: str) -> str:
+    """
+    Validate Google Play track name.
+
+    Args:
+        track: Track name to validate
+
+    Returns:
+        Validated track name
+
+    Raises:
+        ValueError: If track is invalid
+    """
+    valid_tracks = {"internal", "alpha", "beta", "production"}
+
+    if track not in valid_tracks:
+        raise ValueError(f"Invalid track '{track}'. Must be one of: {', '.join(sorted(valid_tracks))}")
+
+    return track
+
+
+def validate_signing_strategy(strategy: str) -> str:
+    """
+    Validate signing strategy.
+
+    Args:
+        strategy: Strategy to validate
+
+    Returns:
+        Validated strategy
+
+    Raises:
+        ValueError: If strategy is invalid
+    """
+    valid_strategies = {"environment_variables", "gradle_properties"}
+
+    if strategy not in valid_strategies:
+        raise ValueError(
+            f"Invalid signing strategy '{strategy}'. Must be one of: {', '.join(sorted(valid_strategies))}"
+        )
+
+    return strategy
+
+
+def validate_android_package_name(package_name: str) -> str:
+    """
+    Validate Android package name format.
+
+    Args:
+        package_name: Package name to validate
+
+    Returns:
+        Validated package name
+
+    Raises:
+        ValueError: If package name is invalid
+    """
+    # Android package names must:
+    # - Start with a lowercase letter
+    # - Contain at least one dot
+    # - Each segment starts with a letter
+    # - Only contain lowercase letters, numbers, and underscores
+    pattern = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
+
+    if not re.match(pattern, package_name):
+        raise ValueError(
+            f"Invalid Android package name: {package_name}. "
+            "Must follow format: com.example.app (lowercase letters, numbers, underscores)"
+        )
+
+    return package_name

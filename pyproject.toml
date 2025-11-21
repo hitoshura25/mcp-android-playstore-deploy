@@ -30,6 +30,9 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.0.0,<2.0.0",
+    "google-auth>=2.0.0",
+    "google-api-python-client>=2.0.0",
+    "requests>=2.28.0",
 ]
 dynamic = ["version"]
 
@@ -50,3 +53,26 @@ hitoshura25-mcp-android-playstore-deploy-cli = "hitoshura25_mcp_android_playstor
 Homepage = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy"
 Repository = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy"
 Issues = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["hitoshura25_mcp_android_playstore_deploy/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Enable additional rule sets for better code quality
+select = [
+    "F",    # pyflakes
+    "E",    # pycodestyle errors (subset)
+    "W",    # pycodestyle warnings (subset)
+    "DTZ",  # flake8-datetimez (timezone-aware datetime)
+]
+# Ignore specific rules that may be too strict for this project
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+]
