@@ -24,19 +24,14 @@ from typing import Any, Dict
 # )
 
 
-
-def analyze_android_project(
-    
-    project_path: str
-    
-) -> Dict[str, Any]:
+def analyze_android_project(project_path: str) -> Dict[str, Any]:
     r"""
     Analyze an Android project to understand its configuration and identify requirements for Play Store deployment
 
     Args:
-        
+
         project_path: Absolute path to the Android project root directory
-        
+
 
     Returns:
         Result dictionary
@@ -88,15 +83,12 @@ def analyze_android_project(
     # Validate project exists and is a directory
     if not project_path_obj.exists():
         return {
-            'success': False,
-            'error': f'Project path does not exist: {project_path}'
+            "success": False,
+            "error": f"Project path does not exist: {project_path}",
         }
 
     if not project_path_obj.is_dir():
-        return {
-            'success': False,
-            'error': f'Path is not a directory: {project_path}'
-        }
+        return {"success": False, "error": f"Path is not a directory: {project_path}"}
 
     # Check for Android project markers
     settings_gradle_kts = project_path_obj / "settings.gradle.kts"
@@ -111,29 +103,30 @@ def analyze_android_project(
 
     if not (has_settings and has_root_build):
         return {
-            'success': False,
-            'error': 'Path does not appear to be an Android project',
-            'details': 'Expected to find settings.gradle(.kts) and build.gradle(.kts)'
+            "success": False,
+            "error": "Path does not appear to be an Android project",
+            "details": "Expected to find settings.gradle(.kts) and build.gradle(.kts)",
         }
 
     # Determine build file paths
-    app_build_file = app_build_gradle_kts if app_build_gradle_kts.exists() else (app_build_gradle if app_build_gradle.exists() else None)
+    app_build_file = (
+        app_build_gradle_kts
+        if app_build_gradle_kts.exists()
+        else (app_build_gradle if app_build_gradle.exists() else None)
+    )
 
     if not app_build_file:
         return {
-            'success': False,
-            'error': 'Could not find app/build.gradle(.kts)',
-            'details': 'This tool expects a standard Android project structure'
+            "success": False,
+            "error": "Could not find app/build.gradle(.kts)",
+            "details": "This tool expects a standard Android project structure",
         }
 
     # Parse app build.gradle
     try:
         build_content = app_build_file.read_text()
     except Exception as e:
-        return {
-            'success': False,
-            'error': f'Failed to read {app_build_file}: {str(e)}'
-        }
+        return {"success": False, "error": f"Failed to read {app_build_file}: {str(e)}"}
 
     # Extract configuration using regex
     package_name = None
@@ -158,32 +151,39 @@ def analyze_android_project(
             package_name = namespace
 
     # Extract version info
-    version_code_match = re.search(r'versionCode\s*=?\s*(\d+)', build_content)
+    version_code_match = re.search(r"versionCode\s*=?\s*(\d+)", build_content)
     if version_code_match:
         version_code = int(version_code_match.group(1))
 
-    version_name_match = re.search(r'versionName\s*=?\s*["\']([^"\']+)["\']', build_content)
+    version_name_match = re.search(
+        r'versionName\s*=?\s*["\']([^"\']+)["\']', build_content
+    )
     if version_name_match:
         version_name = version_name_match.group(1)
 
     # Extract SDK versions
-    compile_sdk_match = re.search(r'compileSdk\s*=?\s*(\d+)', build_content)
+    compile_sdk_match = re.search(r"compileSdk\s*=?\s*(\d+)", build_content)
     if compile_sdk_match:
         compile_sdk = int(compile_sdk_match.group(1))
 
-    target_sdk_match = re.search(r'targetSdk\s*=?\s*(\d+)', build_content)
+    target_sdk_match = re.search(r"targetSdk\s*=?\s*(\d+)", build_content)
     if target_sdk_match:
         target_sdk = int(target_sdk_match.group(1))
 
-    min_sdk_match = re.search(r'minSdk\s*=?\s*(\d+)', build_content)
+    min_sdk_match = re.search(r"minSdk\s*=?\s*(\d+)", build_content)
     if min_sdk_match:
         min_sdk = int(min_sdk_match.group(1))
 
     # Check for signing config
-    has_signing_config = 'signingConfig' in build_content and 'signingConfigs' in build_content
+    has_signing_config = (
+        "signingConfig" in build_content and "signingConfigs" in build_content
+    )
 
     # Check for minify enabled
-    is_minify_enabled = 'isMinifyEnabled = true' in build_content or 'minifyEnabled true' in build_content
+    is_minify_enabled = (
+        "isMinifyEnabled = true" in build_content
+        or "minifyEnabled true" in build_content
+    )
 
     # Detect project type
     project_type = "native_android"
@@ -197,7 +197,9 @@ def analyze_android_project(
     has_github_actions = workflows_dir.exists()
     github_workflows = []
     if has_github_actions:
-        github_workflows = [f.name for f in workflows_dir.glob("*.yml")] + [f.name for f in workflows_dir.glob("*.yaml")]
+        github_workflows = [f.name for f in workflows_dir.glob("*.yml")] + [
+            f.name for f in workflows_dir.glob("*.yaml")
+        ]
 
     # Generate recommendations
     recommendations = []
@@ -205,94 +207,95 @@ def analyze_android_project(
 
     if not is_minify_enabled:
         recommendations.append("Enable code minification for release builds")
-        issues.append({
-            'severity': 'high',
-            'message': 'Code minification is disabled',
-            'fix': 'Set isMinifyEnabled = true in release buildType'
-        })
+        issues.append(
+            {
+                "severity": "high",
+                "message": "Code minification is disabled",
+                "fix": "Set isMinifyEnabled = true in release buildType",
+            }
+        )
 
     if not has_signing_config:
         recommendations.append("Add signing configuration")
-        issues.append({
-            'severity': 'critical',
-            'message': 'No signing configuration found',
-            'fix': 'Use generate_signing_config tool to add signing configuration'
-        })
+        issues.append(
+            {
+                "severity": "critical",
+                "message": "No signing configuration found",
+                "fix": "Use generate_signing_config tool to add signing configuration",
+            }
+        )
 
     if not has_github_actions:
         recommendations.append("Create GitHub Actions workflow")
-        issues.append({
-            'severity': 'medium',
-            'message': 'No GitHub Actions workflows found',
-            'fix': 'Use generate_github_workflow tool to create deployment workflow'
-        })
+        issues.append(
+            {
+                "severity": "medium",
+                "message": "No GitHub Actions workflows found",
+                "fix": "Use generate_github_workflow tool to create deployment workflow",
+            }
+        )
 
     if target_sdk and target_sdk < 33:
-        recommendations.append(f"Update targetSdk to 33 or higher (currently {target_sdk})")
-        issues.append({
-            'severity': 'high',
-            'message': f'targetSdk {target_sdk} is below Google Play requirements',
-            'fix': 'Update targetSdk to at least 33 in build.gradle'
-        })
+        recommendations.append(
+            f"Update targetSdk to 33 or higher (currently {target_sdk})"
+        )
+        issues.append(
+            {
+                "severity": "high",
+                "message": f"targetSdk {target_sdk} is below Google Play requirements",
+                "fix": "Update targetSdk to at least 33 in build.gradle",
+            }
+        )
 
     return {
-        'success': True,
-        'project_type': project_type,
-        'build_system': 'gradle',
-        'package_name': package_name or 'unknown',
-        'namespace': namespace,
-        'has_signing_config': has_signing_config,
-        'has_github_actions': has_github_actions,
-        'github_workflows': github_workflows,
-        'current_version_code': version_code or 1,
-        'current_version_name': version_name or '1.0',
-        'target_sdk': target_sdk,
-        'min_sdk': min_sdk,
-        'compile_sdk': compile_sdk,
-        'build_gradle_path': str(app_build_file),
-        'is_minify_enabled': is_minify_enabled,
-        'recommendations': recommendations,
-        'issues': issues
+        "success": True,
+        "project_type": project_type,
+        "build_system": "gradle",
+        "package_name": package_name or "unknown",
+        "namespace": namespace,
+        "has_signing_config": has_signing_config,
+        "has_github_actions": has_github_actions,
+        "github_workflows": github_workflows,
+        "current_version_code": version_code or 1,
+        "current_version_name": version_name or "1.0",
+        "target_sdk": target_sdk,
+        "min_sdk": min_sdk,
+        "compile_sdk": compile_sdk,
+        "build_gradle_path": str(app_build_file),
+        "is_minify_enabled": is_minify_enabled,
+        "recommendations": recommendations,
+        "issues": issues,
     }
 
 
-
 def generate_keystore(
-    
     output_path: str,
-    
     alias: str,
-    
     key_password: str,
-    
     store_password: str,
-    
     validity_days: int = None,
-    
     key_size: int = None,
-    
-    dname: str = None
-    
+    dname: str = None,
 ) -> Dict[str, Any]:
     r"""
     Generate a new Android keystore file for app signing with secure parameters
 
     Args:
-        
+
         output_path: Absolute path where the keystore will be saved
-        
+
         alias: Key alias for the signing key
-        
+
         key_password: Password for the signing key
-        
+
         store_password: Password for the keystore
-        
+
         validity_days: How many days the key should be valid
-        
+
         key_size: Key size in bits
-        
+
         dname: Distinguished name for the certificate
-        
+
 
     Returns:
         Result dictionary
@@ -359,111 +362,109 @@ def generate_keystore(
     # Check if keystore already exists
     if output_path_obj.exists():
         return {
-            'success': False,
-            'error': f'Keystore already exists at {output_path}',
-            'suggestion': 'Choose a different path or delete the existing keystore'
+            "success": False,
+            "error": f"Keystore already exists at {output_path}",
+            "suggestion": "Choose a different path or delete the existing keystore",
         }
 
     try:
         # Generate keystore using keytool
         cmd = [
-            'keytool',
-            '-genkeypair',
-            '-v',
-            '-keystore', str(output_path_obj),
-            '-alias', alias,
-            '-keyalg', 'RSA',
-            '-keysize', str(key_size),
-            '-validity', str(validity_days),
-            '-storepass', store_password,
-            '-keypass', key_password,
-            '-dname', dname
+            "keytool",
+            "-genkeypair",
+            "-v",
+            "-keystore",
+            str(output_path_obj),
+            "-alias",
+            alias,
+            "-keyalg",
+            "RSA",
+            "-keysize",
+            str(key_size),
+            "-validity",
+            str(validity_days),
+            "-storepass",
+            store_password,
+            "-keypass",
+            key_password,
+            "-dname",
+            dname,
         ]
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode != 0:
             error_msg = result.stderr if result.stderr else result.stdout
-            if "command not found" in error_msg.lower() or "not recognized" in error_msg.lower():
+            if (
+                "command not found" in error_msg.lower()
+                or "not recognized" in error_msg.lower()
+            ):
                 return {
-                    'success': False,
-                    'error': 'keytool not found. Please install JDK and ensure it is in your PATH.',
-                    'suggestion': 'Install JDK from https://adoptium.net/'
+                    "success": False,
+                    "error": "keytool not found. Please install JDK and ensure it is in your PATH.",
+                    "suggestion": "Install JDK from https://adoptium.net/",
                 }
             return {
-                'success': False,
-                'error': f'Failed to generate keystore: {error_msg}',
-                'command': ' '.join(cmd)
+                "success": False,
+                "error": f"Failed to generate keystore: {error_msg}",
+                "command": " ".join(cmd),
             }
 
         # Set restrictive permissions (owner read/write only)
         os.chmod(output_path_obj, 0o600)
 
         # Read and encode keystore to base64
-        with open(output_path_obj, 'rb') as f:
+        with open(output_path_obj, "rb") as f:
             keystore_bytes = f.read()
-            base64_encoded = base64.b64encode(keystore_bytes).decode('utf-8')
+            base64_encoded = base64.b64encode(keystore_bytes).decode("utf-8")
 
         return {
-            'success': True,
-            'keystore_path': str(output_path_obj),
-            'alias': alias,
-            'base64_encoded': base64_encoded,
-            'instructions': [
-                'Save the keystore file securely',
-                'Back up the keystore to multiple locations',
-                'Never commit the keystore to version control',
-                'Store passwords in a secure password manager'
+            "success": True,
+            "keystore_path": str(output_path_obj),
+            "alias": alias,
+            "base64_encoded": base64_encoded,
+            "instructions": [
+                "Save the keystore file securely",
+                "Back up the keystore to multiple locations",
+                "Never commit the keystore to version control",
+                "Store passwords in a secure password manager",
             ],
-            'github_secret_instructions': {
-                'SIGNING_KEY_STORE_BASE64': 'Use the base64_encoded value above',
-                'SIGNING_KEY_ALIAS': alias,
-                'SIGNING_KEY_PASSWORD': 'Use the key_password you provided',
-                'SIGNING_STORE_PASSWORD': 'Use the store_password you provided'
+            "github_secret_instructions": {
+                "SIGNING_KEY_STORE_BASE64": "Use the base64_encoded value above",
+                "SIGNING_KEY_ALIAS": alias,
+                "SIGNING_KEY_PASSWORD": "Use the key_password you provided",
+                "SIGNING_STORE_PASSWORD": "Use the store_password you provided",
             },
-            'warning': 'CRITICAL: Loss of this keystore will prevent you from updating your app on Google Play. Back it up securely.'
+            "warning": "CRITICAL: Loss of this keystore will prevent you from updating your app on Google Play. Back it up securely.",
         }
 
     except subprocess.TimeoutExpired:
         return {
-            'success': False,
-            'error': 'Keystore generation timed out after 60 seconds'
+            "success": False,
+            "error": "Keystore generation timed out after 60 seconds",
         }
     except FileNotFoundError:
         return {
-            'success': False,
-            'error': 'keytool not found. Please install JDK and ensure it is in your PATH.',
-            'suggestion': 'Install JDK from https://adoptium.net/'
+            "success": False,
+            "error": "keytool not found. Please install JDK and ensure it is in your PATH.",
+            "suggestion": "Install JDK from https://adoptium.net/",
         }
     except Exception as e:
-        return {
-            'success': False,
-            'error': f'Unexpected error: {str(e)}'
-        }
-
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 
 def generate_signing_config(
-    
-    project_path: str,
-    
-    signing_strategy: str = None
-    
+    project_path: str, signing_strategy: str = None
 ) -> Dict[str, Any]:
     r"""
     Generate Gradle signing configuration code to add to build.gradle.kts
 
     Args:
-        
+
         project_path: Path to Android project
-        
+
         signing_strategy: How to provide signing credentials (environment_variables or gradle_properties)
-        
+
 
     Returns:
         Result dictionary
@@ -512,7 +513,7 @@ def generate_signing_config(
         signing_strategy = "environment_variables"
 
     # Generate Kotlin DSL
-    gradle_config_kotlin = '''signingConfigs {
+    gradle_config_kotlin = """signingConfigs {
     create("release") {
         storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
         storePassword = System.getenv("SIGNING_STORE_PASSWORD")
@@ -531,10 +532,10 @@ buildTypes {
             "proguard-rules.pro"
         )
     }
-}'''
+}"""
 
     # Generate Groovy DSL
-    gradle_config_groovy = '''signingConfigs {
+    gradle_config_groovy = """signingConfigs {
     release {
         storeFile file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
         storePassword System.getenv("SIGNING_STORE_PASSWORD")
@@ -550,10 +551,10 @@ buildTypes {
         shrinkResources true
         proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
     }
-}'''
+}"""
 
     # Complete example
-    complete_example = '''plugins {
+    complete_example = """plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
@@ -599,37 +600,34 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-}'''
+}"""
 
     return {
-        'success': True,
-        'gradle_config_kotlin': gradle_config_kotlin,
-        'gradle_config_groovy': gradle_config_groovy,
-        'insert_location': 'Inside android { ... } block, before buildTypes',
-        'instructions': [
-            'Add the signingConfigs block to your app/build.gradle.kts',
-            'Update your release buildType to use the signing config',
-            'Set environment variables in your CI/CD pipeline'
+        "success": True,
+        "gradle_config_kotlin": gradle_config_kotlin,
+        "gradle_config_groovy": gradle_config_groovy,
+        "insert_location": "Inside android { ... } block, before buildTypes",
+        "instructions": [
+            "Add the signingConfigs block to your app/build.gradle.kts",
+            "Update your release buildType to use the signing config",
+            "Set environment variables in your CI/CD pipeline",
         ],
-        'required_env_vars': [
-            'SIGNING_KEY_STORE_PATH',
-            'SIGNING_STORE_PASSWORD',
-            'SIGNING_KEY_ALIAS',
-            'SIGNING_KEY_PASSWORD'
+        "required_env_vars": [
+            "SIGNING_KEY_STORE_PATH",
+            "SIGNING_STORE_PASSWORD",
+            "SIGNING_KEY_ALIAS",
+            "SIGNING_KEY_PASSWORD",
         ],
-        'complete_example': complete_example
+        "complete_example": complete_example,
     }
 
 
-
-def setup_service_account_guide(
-    
-) -> Dict[str, Any]:
+def setup_service_account_guide() -> Dict[str, Any]:
     r"""
     Provide interactive step-by-step guide for setting up Google Play Service Account
 
     Args:
-        
+
 
     Returns:
         Result dictionary
@@ -674,125 +672,116 @@ def setup_service_account_guide(
                 return {'success': True, 'data': data}
     """
     return {
-        'success': True,
-        'steps': [
+        "success": True,
+        "steps": [
             {
-                'step_number': 1,
-                'title': 'Access Google Play Console',
-                'description': 'Navigate to Google Play Console and sign in with your developer account',
-                'url': 'https://play.google.com/console/',
-                'action': 'Open URL in browser',
-                'verification': 'You should see your app listed in the Play Console'
+                "step_number": 1,
+                "title": "Access Google Play Console",
+                "description": "Navigate to Google Play Console and sign in with your developer account",
+                "url": "https://play.google.com/console/",
+                "action": "Open URL in browser",
+                "verification": "You should see your app listed in the Play Console",
             },
             {
-                'step_number': 2,
-                'title': 'Navigate to API Access',
-                'description': 'In the left sidebar, go to Setup > API access',
-                'action': 'Click through navigation',
-                'verification': 'You should see the API access page with service accounts section'
+                "step_number": 2,
+                "title": "Navigate to API Access",
+                "description": "In the left sidebar, go to Setup > API access",
+                "action": "Click through navigation",
+                "verification": "You should see the API access page with service accounts section",
             },
             {
-                'step_number': 3,
-                'title': 'Create Service Account',
-                'description': 'Click "Create new service account" button',
-                'action': 'Follow link to Google Cloud Platform',
-                'url': 'https://console.cloud.google.com/',
-                'details': 'This will open Google Cloud Console in a new tab'
+                "step_number": 3,
+                "title": "Create Service Account",
+                "description": 'Click "Create new service account" button',
+                "action": "Follow link to Google Cloud Platform",
+                "url": "https://console.cloud.google.com/",
+                "details": "This will open Google Cloud Console in a new tab",
             },
             {
-                'step_number': 4,
-                'title': 'Create Service Account in GCP',
-                'description': 'In Google Cloud Console, create a new service account',
-                'action': 'Fill in service account details',
-                'required_fields': {
-                    'name': 'playstore-deploy-bot',
-                    'description': 'Service account for automated Play Store deployments'
-                }
+                "step_number": 4,
+                "title": "Create Service Account in GCP",
+                "description": "In Google Cloud Console, create a new service account",
+                "action": "Fill in service account details",
+                "required_fields": {
+                    "name": "playstore-deploy-bot",
+                    "description": "Service account for automated Play Store deployments",
+                },
             },
             {
-                'step_number': 5,
-                'title': 'Create JSON Key',
-                'description': 'Create and download a JSON key for the service account',
-                'action': 'Click "Create Key" > Select JSON format > Download',
-                'warning': 'This key will only be shown once. Store it securely.',
-                'verification': 'You should have a JSON file downloaded'
+                "step_number": 5,
+                "title": "Create JSON Key",
+                "description": "Create and download a JSON key for the service account",
+                "action": 'Click "Create Key" > Select JSON format > Download',
+                "warning": "This key will only be shown once. Store it securely.",
+                "verification": "You should have a JSON file downloaded",
             },
             {
-                'step_number': 6,
-                'title': 'Grant Permissions in Play Console',
-                'description': 'Return to Play Console and grant permissions to the service account',
-                'action': 'Select "Release Manager" role',
-                'required_permissions': ['Release Manager'],
-                'verification': 'Service account should appear in the list with correct permissions'
+                "step_number": 6,
+                "title": "Grant Permissions in Play Console",
+                "description": "Return to Play Console and grant permissions to the service account",
+                "action": 'Select "Release Manager" role',
+                "required_permissions": ["Release Manager"],
+                "verification": "Service account should appear in the list with correct permissions",
             },
             {
-                'step_number': 7,
-                'title': 'Enable Play Developer API',
-                'description': 'Ensure Google Play Developer API is enabled in your Google Cloud project',
-                'url': 'https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com',
-                'action': 'Click "Enable API"',
-                'verification': 'API should show as "Enabled"'
-            }
+                "step_number": 7,
+                "title": "Enable Play Developer API",
+                "description": "Ensure Google Play Developer API is enabled in your Google Cloud project",
+                "url": "https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com",
+                "action": 'Click "Enable API"',
+                "verification": 'API should show as "Enabled"',
+            },
         ],
-        'validation_checklist': [
-            'Service account JSON key file downloaded',
-            'Service account has Release Manager role in Play Console',
-            'Google Play Developer API is enabled',
-            'You have the service account email address'
+        "validation_checklist": [
+            "Service account JSON key file downloaded",
+            "Service account has Release Manager role in Play Console",
+            "Google Play Developer API is enabled",
+            "You have the service account email address",
         ],
-        'troubleshooting': {
-            'common_issues': [
+        "troubleshooting": {
+            "common_issues": [
                 {
-                    'issue': 'Cannot see "API access" option',
-                    'solution': 'You need to be the account owner or have Admin permissions'
+                    "issue": 'Cannot see "API access" option',
+                    "solution": "You need to be the account owner or have Admin permissions",
                 },
                 {
-                    'issue': 'Service account not appearing in Play Console',
-                    'solution': 'Make sure you completed the linking step from Play Console to GCP'
-                }
+                    "issue": "Service account not appearing in Play Console",
+                    "solution": "Make sure you completed the linking step from Play Console to GCP",
+                },
             ]
         },
-        'next_steps': 'After completing these steps, you\'ll use the JSON key file as a GitHub Secret'
+        "next_steps": "After completing these steps, you'll use the JSON key file as a GitHub Secret",
     }
 
 
-
 def generate_github_workflow(
-    
     project_path: str,
-    
     package_name: str,
-    
     track: str = None,
-    
     trigger_strategy: str = None,
-    
     branch_name: str = None,
-    
     app_module_path: str = None,
-    
-    java_version: str = None
-    
+    java_version: str = None,
 ) -> Dict[str, Any]:
     r"""
     Generate a complete GitHub Actions workflow file for Play Store deployment
 
     Args:
-        
+
         project_path: Path to Android project
-        
+
         package_name: Android app package name
-        
+
         track: Play Store release track (internal, alpha, beta, production)
-        
+
         trigger_strategy: How to trigger the workflow (manual, branch, tag)
-        
+
         branch_name: Branch name to trigger on if trigger_strategy is branch
-        
+
         app_module_path: Path to app module relative to project root
-        
+
         java_version: Java/JDK version to use for builds
-        
+
 
     Returns:
         Result dictionary
@@ -916,74 +905,65 @@ jobs:
 
     required_secrets = [
         {
-            'name': 'SERVICE_ACCOUNT_JSON_PLAINTEXT',
-            'description': 'Contents of the service account JSON file',
-            'how_to_generate': 'Download from Google Cloud Console when creating service account key'
+            "name": "SERVICE_ACCOUNT_JSON_PLAINTEXT",
+            "description": "Contents of the service account JSON file",
+            "how_to_generate": "Download from Google Cloud Console when creating service account key",
         },
         {
-            'name': 'SIGNING_KEY_STORE_BASE64',
-            'description': 'Base64-encoded keystore file',
-            'how_to_generate': 'Run: base64 -w 0 your-keystore.jks'
+            "name": "SIGNING_KEY_STORE_BASE64",
+            "description": "Base64-encoded keystore file",
+            "how_to_generate": "Run: base64 -w 0 your-keystore.jks",
         },
         {
-            'name': 'SIGNING_KEY_ALIAS',
-            'description': 'The alias of your signing key',
-            'how_to_generate': 'This is what you specified when creating the keystore'
+            "name": "SIGNING_KEY_ALIAS",
+            "description": "The alias of your signing key",
+            "how_to_generate": "This is what you specified when creating the keystore",
         },
         {
-            'name': 'SIGNING_KEY_PASSWORD',
-            'description': 'Password for your signing key',
-            'how_to_generate': 'This is what you specified when creating the keystore'
+            "name": "SIGNING_KEY_PASSWORD",
+            "description": "Password for your signing key",
+            "how_to_generate": "This is what you specified when creating the keystore",
         },
         {
-            'name': 'SIGNING_STORE_PASSWORD',
-            'description': 'Password for your keystore',
-            'how_to_generate': 'This is what you specified when creating the keystore'
-        }
+            "name": "SIGNING_STORE_PASSWORD",
+            "description": "Password for your keystore",
+            "how_to_generate": "This is what you specified when creating the keystore",
+        },
     ]
 
     return {
-        'success': True,
-        'workflow_path': workflow_path,
-        'workflow_content': workflow_content,
-        'required_secrets': required_secrets,
-        'instructions': [
-            'Create .github/workflows directory if it doesn\'t exist',
-            'Save the workflow_content to the workflow_path',
-            'Configure the required GitHub Secrets',
-            'Commit and push the workflow file',
-            'Test with a manual workflow dispatch'
+        "success": True,
+        "workflow_path": workflow_path,
+        "workflow_content": workflow_content,
+        "required_secrets": required_secrets,
+        "instructions": [
+            "Create .github/workflows directory if it doesn't exist",
+            "Save the workflow_content to the workflow_path",
+            "Configure the required GitHub Secrets",
+            "Commit and push the workflow file",
+            "Test with a manual workflow dispatch",
         ],
-        'estimated_build_time': '5-10 minutes',
-        'github_actions_cost': 'Free for public repos, 2000 minutes/month for private repos on free tier'
+        "estimated_build_time": "5-10 minutes",
+        "github_actions_cost": "Free for public repos, 2000 minutes/month for private repos on free tier",
     }
 
 
-
 def validate_github_secrets(
-    
-    repo_owner: str,
-    
-    repo_name: str,
-    
-    github_token: str,
-    
-    required_secrets: Any = None
-    
+    repo_owner: str, repo_name: str, github_token: str, required_secrets: Any = None
 ) -> Dict[str, Any]:
     r"""
     Validate that required GitHub Secrets are configured (checks existence only)
 
     Args:
-        
+
         repo_owner: GitHub repository owner username or organization
-        
+
         repo_name: GitHub repository name
-        
+
         github_token: GitHub Personal Access Token with repo scope
-        
+
         required_secrets: List of secret names to check for
-        
+
 
     Returns:
         Result dictionary
@@ -1033,63 +1013,63 @@ def validate_github_secrets(
     # Default required secrets
     if required_secrets is None:
         required_secrets = [
-            'SERVICE_ACCOUNT_JSON_PLAINTEXT',
-            'SIGNING_KEY_STORE_BASE64',
-            'SIGNING_KEY_ALIAS',
-            'SIGNING_KEY_PASSWORD',
-            'SIGNING_STORE_PASSWORD'
+            "SERVICE_ACCOUNT_JSON_PLAINTEXT",
+            "SIGNING_KEY_STORE_BASE64",
+            "SIGNING_KEY_ALIAS",
+            "SIGNING_KEY_PASSWORD",
+            "SIGNING_STORE_PASSWORD",
         ]
 
     # GitHub API URL
-    url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/actions/secrets'
+    url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/actions/secrets"
 
     try:
         response = requests.get(
             url,
             headers={
-                'Authorization': f'token {github_token}',
-                'Accept': 'application/vnd.github.v3+json'
+                "Authorization": f"token {github_token}",
+                "Accept": "application/vnd.github.v3+json",
             },
-            timeout=30
+            timeout=30,
         )
 
         if response.status_code == 401:
             return {
-                'success': False,
-                'error': 'GitHub token is invalid or expired',
-                'suggestion': 'Generate a new token at https://github.com/settings/tokens with repo scope'
+                "success": False,
+                "error": "GitHub token is invalid or expired",
+                "suggestion": "Generate a new token at https://github.com/settings/tokens with repo scope",
             }
         elif response.status_code == 403:
-            if 'rate limit' in response.text.lower():
+            if "rate limit" in response.text.lower():
                 return {
-                    'success': False,
-                    'error': 'GitHub API rate limit exceeded',
-                    'suggestion': 'Wait an hour or use a token with higher limits'
+                    "success": False,
+                    "error": "GitHub API rate limit exceeded",
+                    "suggestion": "Wait an hour or use a token with higher limits",
                 }
             else:
                 return {
-                    'success': False,
-                    'error': 'GitHub token lacks required permissions',
-                    'suggestion': 'Ensure token has "repo" scope'
+                    "success": False,
+                    "error": "GitHub token lacks required permissions",
+                    "suggestion": 'Ensure token has "repo" scope',
                 }
         elif response.status_code == 404:
             return {
-                'success': False,
-                'error': 'Repository not found',
-                'suggestion': 'Check owner/repo names and token permissions'
+                "success": False,
+                "error": "Repository not found",
+                "suggestion": "Check owner/repo names and token permissions",
             }
         elif response.status_code >= 500:
             return {
-                'success': False,
-                'error': f'GitHub API is experiencing issues (HTTP {response.status_code})',
-                'suggestion': 'Try again later'
+                "success": False,
+                "error": f"GitHub API is experiencing issues (HTTP {response.status_code})",
+                "suggestion": "Try again later",
             }
 
         response.raise_for_status()
         data = response.json()
 
         # Extract configured secret names
-        configured_secrets = [secret['name'] for secret in data.get('secrets', [])]
+        configured_secrets = [secret["name"] for secret in data.get("secrets", [])]
 
         # Check which required secrets are missing
         missing_secrets = [s for s in required_secrets if s not in configured_secrets]
@@ -1098,64 +1078,60 @@ def validate_github_secrets(
         # Generate instructions for missing secrets
         instructions_for_missing = {}
         secret_instructions = {
-            'SERVICE_ACCOUNT_JSON_PLAINTEXT': 'Download the service account JSON from Google Cloud Console, then copy its entire contents into this secret',
-            'SIGNING_KEY_STORE_BASE64': 'Run "base64 -w 0 your-keystore.jks" and paste the output here',
-            'SIGNING_KEY_ALIAS': 'The alias you specified when creating the keystore',
-            'SIGNING_KEY_PASSWORD': 'The password for your signing key',
-            'SIGNING_STORE_PASSWORD': 'The password for your keystore'
+            "SERVICE_ACCOUNT_JSON_PLAINTEXT": "Download the service account JSON from Google Cloud Console, then copy its entire contents into this secret",
+            "SIGNING_KEY_STORE_BASE64": 'Run "base64 -w 0 your-keystore.jks" and paste the output here',
+            "SIGNING_KEY_ALIAS": "The alias you specified when creating the keystore",
+            "SIGNING_KEY_PASSWORD": "The password for your signing key",
+            "SIGNING_STORE_PASSWORD": "The password for your keystore",
         }
 
         for secret in missing_secrets:
-            instructions_for_missing[secret] = secret_instructions.get(secret, 'Configure this secret')
+            instructions_for_missing[secret] = secret_instructions.get(
+                secret, "Configure this secret"
+            )
 
         return {
-            'success': True,
-            'all_secrets_present': all_present,
-            'total_required': len(required_secrets),
-            'total_configured': len(required_secrets) - len(missing_secrets),
-            'missing_secrets': missing_secrets,
-            'configured_secrets': [s for s in required_secrets if s in configured_secrets],
-            'instructions_for_missing': instructions_for_missing,
-            'github_secrets_url': f'https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions',
-            'validation_timestamp': datetime.utcnow().isoformat() + 'Z'
+            "success": True,
+            "all_secrets_present": all_present,
+            "total_required": len(required_secrets),
+            "total_configured": len(required_secrets) - len(missing_secrets),
+            "missing_secrets": missing_secrets,
+            "configured_secrets": [
+                s for s in required_secrets if s in configured_secrets
+            ],
+            "instructions_for_missing": instructions_for_missing,
+            "github_secrets_url": f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions",
+            "validation_timestamp": datetime.utcnow().isoformat() + "Z",
         }
 
     except requests.exceptions.Timeout:
         return {
-            'success': False,
-            'error': 'GitHub API request timed out',
-            'suggestion': 'Check your internet connection'
+            "success": False,
+            "error": "GitHub API request timed out",
+            "suggestion": "Check your internet connection",
         }
     except requests.exceptions.ConnectionError:
         return {
-            'success': False,
-            'error': 'Cannot connect to GitHub API',
-            'suggestion': 'Check your internet connection'
+            "success": False,
+            "error": "Cannot connect to GitHub API",
+            "suggestion": "Check your internet connection",
         }
     except Exception as e:
-        return {
-            'success': False,
-            'error': f'Unexpected error: {str(e)}'
-        }
-
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 
 def create_github_secrets_guide(
-    
-    repo_url: str,
-    
-    keystore_path: str = None
-    
+    repo_url: str, keystore_path: str = None
 ) -> Dict[str, Any]:
     r"""
     Generate a comprehensive guide for creating all required GitHub Secrets
 
     Args:
-        
+
         repo_url: GitHub repository URL
-        
+
         keystore_path: Optional path to keystore for encoding instructions
-        
+
 
     Returns:
         Result dictionary
@@ -1201,112 +1177,114 @@ def create_github_secrets_guide(
     """
     # Parse repo URL to extract owner and name
     import re
-    github_match = re.match(r'https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$', repo_url)
+
+    github_match = re.match(
+        r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url
+    )
     if github_match:
         repo_owner, repo_name = github_match.groups()
-        github_secrets_url = f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions"
+        github_secrets_url = (
+            f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions"
+        )
     else:
         github_secrets_url = repo_url + "/settings/secrets/actions"
 
-    example_command = "base64 -w 0 release.jks" if keystore_path else "base64 -w 0 your-keystore.jks"
+    example_command = (
+        "base64 -w 0 release.jks" if keystore_path else "base64 -w 0 your-keystore.jks"
+    )
 
     return {
-        'success': True,
-        'github_secrets_url': github_secrets_url,
-        'secrets': [
+        "success": True,
+        "github_secrets_url": github_secrets_url,
+        "secrets": [
             {
-                'name': 'SERVICE_ACCOUNT_JSON_PLAINTEXT',
-                'description': 'The complete contents of your Google Play service account JSON file',
-                'how_to_get_value': [
-                    'Open the JSON file you downloaded from Google Cloud Console',
-                    'Copy the entire file contents (all the JSON)',
-                    'Paste it directly into the secret value field'
+                "name": "SERVICE_ACCOUNT_JSON_PLAINTEXT",
+                "description": "The complete contents of your Google Play service account JSON file",
+                "how_to_get_value": [
+                    "Open the JSON file you downloaded from Google Cloud Console",
+                    "Copy the entire file contents (all the JSON)",
+                    "Paste it directly into the secret value field",
                 ],
-                'is_sensitive': True,
-                'required': True
+                "is_sensitive": True,
+                "required": True,
             },
             {
-                'name': 'SIGNING_KEY_STORE_BASE64',
-                'description': 'Your Android keystore file encoded as base64',
-                'how_to_get_value': [
-                    'Open terminal/command prompt',
-                    'Navigate to the directory containing your keystore',
-                    'Run: base64 -w 0 your-keystore.jks (Linux/Mac)',
-                    'Or: certutil -encode your-keystore.jks keystore-base64.txt (Windows)',
-                    'Copy the output and paste as the secret value'
+                "name": "SIGNING_KEY_STORE_BASE64",
+                "description": "Your Android keystore file encoded as base64",
+                "how_to_get_value": [
+                    "Open terminal/command prompt",
+                    "Navigate to the directory containing your keystore",
+                    "Run: base64 -w 0 your-keystore.jks (Linux/Mac)",
+                    "Or: certutil -encode your-keystore.jks keystore-base64.txt (Windows)",
+                    "Copy the output and paste as the secret value",
                 ],
-                'example_command': example_command,
-                'is_sensitive': True,
-                'required': True
+                "example_command": example_command,
+                "is_sensitive": True,
+                "required": True,
             },
             {
-                'name': 'SIGNING_KEY_ALIAS',
-                'description': 'The alias you chose when creating your keystore',
-                'how_to_get_value': [
-                    'This is the value you specified when creating the keystore',
-                    'If you forgot it, run: keytool -list -v -keystore your-keystore.jks'
+                "name": "SIGNING_KEY_ALIAS",
+                "description": "The alias you chose when creating your keystore",
+                "how_to_get_value": [
+                    "This is the value you specified when creating the keystore",
+                    "If you forgot it, run: keytool -list -v -keystore your-keystore.jks",
                 ],
-                'is_sensitive': False,
-                'required': True
+                "is_sensitive": False,
+                "required": True,
             },
             {
-                'name': 'SIGNING_KEY_PASSWORD',
-                'description': 'The password for your signing key',
-                'how_to_get_value': [
-                    'This is the password you set when creating the keystore key'
+                "name": "SIGNING_KEY_PASSWORD",
+                "description": "The password for your signing key",
+                "how_to_get_value": [
+                    "This is the password you set when creating the keystore key"
                 ],
-                'is_sensitive': True,
-                'required': True
+                "is_sensitive": True,
+                "required": True,
             },
             {
-                'name': 'SIGNING_STORE_PASSWORD',
-                'description': 'The password for your keystore file',
-                'how_to_get_value': [
-                    'This is the password you set when creating the keystore'
+                "name": "SIGNING_STORE_PASSWORD",
+                "description": "The password for your keystore file",
+                "how_to_get_value": [
+                    "This is the password you set when creating the keystore"
                 ],
-                'is_sensitive': True,
-                'required': True
-            }
+                "is_sensitive": True,
+                "required": True,
+            },
         ],
-        'step_by_step_instructions': [
-            'Navigate to your GitHub repository',
-            'Click on Settings tab',
+        "step_by_step_instructions": [
+            "Navigate to your GitHub repository",
+            "Click on Settings tab",
             'In left sidebar, click "Secrets and variables" > "Actions"',
             'Click "New repository secret" button',
-            'For each secret above:',
-            '  - Enter the exact secret name (case-sensitive)',
+            "For each secret above:",
+            "  - Enter the exact secret name (case-sensitive)",
             '  - Follow the "how_to_get_value" instructions',
-            '  - Paste the value',
+            "  - Paste the value",
             '  - Click "Add secret"',
-            'Verify all 5 secrets are listed'
+            "Verify all 5 secrets are listed",
         ],
-        'security_reminders': [
-            'Never commit secrets to your repository',
-            'Never log or print secret values',
-            'Store passwords in a secure password manager',
-            'Back up your keystore and passwords securely',
-            'Rotate service account keys periodically'
-        ]
+        "security_reminders": [
+            "Never commit secrets to your repository",
+            "Never log or print secret values",
+            "Store passwords in a secure password manager",
+            "Back up your keystore and passwords securely",
+            "Rotate service account keys periodically",
+        ],
     }
 
 
-
 def validate_play_store_setup(
-    
-    service_account_json_path: str,
-    
-    package_name: str
-    
+    service_account_json_path: str, package_name: str
 ) -> Dict[str, Any]:
     r"""
     Validate that Play Store app and API access are properly configured using service account
 
     Args:
-        
+
         service_account_json_path: Path to service account JSON file
-        
+
         package_name: Android app package name to validate
-        
+
 
     Returns:
         Result dictionary
@@ -1358,17 +1336,17 @@ def validate_play_store_setup(
         from googleapiclient.errors import HttpError
     except ImportError:
         return {
-            'success': False,
-            'error': 'Google API client libraries not installed',
-            'suggestion': 'Install with: pip install google-auth google-api-python-client'
+            "success": False,
+            "error": "Google API client libraries not installed",
+            "suggestion": "Install with: pip install google-auth google-api-python-client",
         }
 
     # Validate service account file exists
     service_account_path = Path(service_account_json_path).resolve()
     if not service_account_path.exists():
         return {
-            'success': False,
-            'error': f'Service account file not found: {service_account_json_path}'
+            "success": False,
+            "error": f"Service account file not found: {service_account_json_path}",
         }
 
     checks = {}
@@ -1380,186 +1358,203 @@ def validate_play_store_setup(
         # Authenticate with service account
         credentials = service_account.Credentials.from_service_account_file(
             str(service_account_path),
-            scopes=['https://www.googleapis.com/auth/androidpublisher']
+            scopes=["https://www.googleapis.com/auth/androidpublisher"],
         )
 
-        checks['service_account_valid'] = {
-            'status': 'pass',
-            'message': 'Service account credentials are valid'
+        checks["service_account_valid"] = {
+            "status": "pass",
+            "message": "Service account credentials are valid",
         }
 
         # Build API client
-        service = build('androidpublisher', 'v3', credentials=credentials)
+        service = build("androidpublisher", "v3", credentials=credentials)
 
         # Try to create an edit (this validates API access and app existence)
         try:
             edit_request = service.edits().insert(body={}, packageName=package_name)
             edit_result = edit_request.execute()
-            edit_id = edit_result['id']
+            edit_id = edit_result["id"]
 
             # If we get here, the app exists and we have access
-            checks['app_exists'] = {
-                'status': 'pass',
-                'message': 'App with package name exists in Play Console'
+            checks["app_exists"] = {
+                "status": "pass",
+                "message": "App with package name exists in Play Console",
             }
 
-            checks['permissions_sufficient'] = {
-                'status': 'pass',
-                'message': 'Service account has sufficient permissions',
-                'details': 'Can create edits'
+            checks["permissions_sufficient"] = {
+                "status": "pass",
+                "message": "Service account has sufficient permissions",
+                "details": "Can create edits",
             }
 
             # Get tracks information
             try:
-                tracks_response = service.edits().tracks().list(
-                    packageName=package_name,
-                    editId=edit_id
-                ).execute()
+                tracks_response = (
+                    service.edits()
+                    .tracks()
+                    .list(packageName=package_name, editId=edit_id)
+                    .execute()
+                )
 
-                available_tracks = [track['track'] for track in tracks_response.get('tracks', [])]
+                available_tracks = [
+                    track["track"] for track in tracks_response.get("tracks", [])
+                ]
 
-                checks['can_access_tracks'] = {
-                    'status': 'pass',
-                    'message': 'Can access release tracks',
-                    'available_tracks': available_tracks if available_tracks else ['internal', 'alpha', 'beta', 'production']
+                checks["can_access_tracks"] = {
+                    "status": "pass",
+                    "message": "Can access release tracks",
+                    "available_tracks": available_tracks
+                    if available_tracks
+                    else ["internal", "alpha", "beta", "production"],
                 }
 
                 if not available_tracks:
-                    warnings.append('No releases found on any track - this is expected for new apps')
+                    warnings.append(
+                        "No releases found on any track - this is expected for new apps"
+                    )
 
             except HttpError as e:
-                checks['can_access_tracks'] = {
-                    'status': 'partial',
-                    'message': 'Limited track access',
-                    'details': str(e)
+                checks["can_access_tracks"] = {
+                    "status": "partial",
+                    "message": "Limited track access",
+                    "details": str(e),
                 }
-                warnings.append('Could not list all tracks - may have limited permissions')
+                warnings.append(
+                    "Could not list all tracks - may have limited permissions"
+                )
 
             # Clean up the edit
             try:
-                service.edits().delete(packageName=package_name, editId=edit_id).execute()
+                service.edits().delete(
+                    packageName=package_name, editId=edit_id
+                ).execute()
             except Exception:
                 pass  # Ignore cleanup errors
 
         except HttpError as e:
             if e.resp.status == 404:
-                checks['app_exists'] = {
-                    'status': 'fail',
-                    'message': f'App with package name "{package_name}" not found in Play Console'
+                checks["app_exists"] = {
+                    "status": "fail",
+                    "message": f'App with package name "{package_name}" not found in Play Console',
                 }
-                errors.append('App not found. Make sure the app is created in Play Console first.')
-                overall_status = 'failure'
+                errors.append(
+                    "App not found. Make sure the app is created in Play Console first."
+                )
+                overall_status = "failure"
             elif e.resp.status == 403:
-                checks['permissions_sufficient'] = {
-                    'status': 'fail',
-                    'message': 'Service account lacks required permissions'
+                checks["permissions_sufficient"] = {
+                    "status": "fail",
+                    "message": "Service account lacks required permissions",
                 }
-                errors.append('Service account needs "Release Manager" role in Play Console')
-                overall_status = 'failure'
+                errors.append(
+                    'Service account needs "Release Manager" role in Play Console'
+                )
+                overall_status = "failure"
             else:
                 raise
 
-        checks['api_enabled'] = {
-            'status': 'pass',
-            'message': 'Google Play Developer API is enabled'
+        checks["api_enabled"] = {
+            "status": "pass",
+            "message": "Google Play Developer API is enabled",
         }
 
     except FileNotFoundError:
-        checks['service_account_valid'] = {
-            'status': 'fail',
-            'message': f'Service account file not found: {service_account_json_path}'
+        checks["service_account_valid"] = {
+            "status": "fail",
+            "message": f"Service account file not found: {service_account_json_path}",
         }
-        errors.append('Service account JSON file does not exist')
-        overall_status = 'failure'
+        errors.append("Service account JSON file does not exist")
+        overall_status = "failure"
 
     except ValueError as e:
-        if 'json' in str(e).lower():
-            checks['service_account_valid'] = {
-                'status': 'fail',
-                'message': 'Invalid service account JSON format'
+        if "json" in str(e).lower():
+            checks["service_account_valid"] = {
+                "status": "fail",
+                "message": "Invalid service account JSON format",
             }
-            errors.append('Service account JSON is malformed. Re-download from Google Cloud Console.')
-            overall_status = 'failure'
+            errors.append(
+                "Service account JSON is malformed. Re-download from Google Cloud Console."
+            )
+            overall_status = "failure"
         else:
             raise
 
     except HttpError as e:
         if e.resp.status == 401:
-            checks['service_account_valid'] = {
-                'status': 'fail',
-                'message': 'Service account credentials are invalid'
+            checks["service_account_valid"] = {
+                "status": "fail",
+                "message": "Service account credentials are invalid",
             }
-            errors.append('Service account credentials rejected. Verify the JSON file is correct.')
-            overall_status = 'failure'
+            errors.append(
+                "Service account credentials rejected. Verify the JSON file is correct."
+            )
+            overall_status = "failure"
         elif e.resp.status == 403:
-            checks['api_enabled'] = {
-                'status': 'fail',
-                'message': 'Google Play Developer API is not enabled or accessible'
+            checks["api_enabled"] = {
+                "status": "fail",
+                "message": "Google Play Developer API is not enabled or accessible",
             }
-            errors.append('Enable the API at: https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com')
-            overall_status = 'failure'
+            errors.append(
+                "Enable the API at: https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com"
+            )
+            overall_status = "failure"
         else:
-            errors.append(f'Google Play API error: {e.resp.status} - {e._get_reason()}')
-            overall_status = 'failure'
+            errors.append(f"Google Play API error: {e.resp.status} - {e._get_reason()}")
+            overall_status = "failure"
 
     except Exception as e:
-        errors.append(f'Unexpected error: {str(e)}')
-        overall_status = 'failure'
+        errors.append(f"Unexpected error: {str(e)}")
+        overall_status = "failure"
 
     # Generate next steps
     next_steps = []
-    if overall_status == 'success':
+    if overall_status == "success":
         next_steps = [
-            'Your Play Store setup is complete',
-            'You can now deploy to the internal track',
-            'Make sure to add testers to your internal testing group'
+            "Your Play Store setup is complete",
+            "You can now deploy to the internal track",
+            "Make sure to add testers to your internal testing group",
         ]
     else:
-        next_steps = ['Fix the errors listed above', 'Re-run validation after making changes']
+        next_steps = [
+            "Fix the errors listed above",
+            "Re-run validation after making changes",
+        ]
 
     return {
-        'success': overall_status == 'success',
-        'overall_status': overall_status,
-        'checks': checks,
-        'errors': errors,
-        'warnings': warnings,
-        'next_steps': next_steps
+        "success": overall_status == "success",
+        "overall_status": overall_status,
+        "checks": checks,
+        "errors": errors,
+        "warnings": warnings,
+        "next_steps": next_steps,
     }
 
 
-
 def test_deployment_workflow(
-    
     project_path: str,
-    
     keystore_path: str,
-    
     store_password: str,
-    
     key_alias: str,
-    
     key_password: str,
-    
-    dry_run: bool = None
-    
+    dry_run: bool = None,
 ) -> Dict[str, Any]:
     r"""
     Test the deployment workflow locally without uploading to Play Store
 
     Args:
-        
+
         project_path: Path to Android project
-        
+
         keystore_path: Path to keystore file
-        
+
         store_password: Keystore password
-        
+
         key_alias: Key alias
-        
+
         key_password: Key password
-        
+
         dry_run: If true, skip actual Play Store upload
-        
+
 
     Returns:
         Result dictionary
@@ -1618,26 +1613,26 @@ def test_deployment_workflow(
     # Validate paths
     if not project_path_obj.exists():
         return {
-            'success': False,
-            'overall_status': 'failure',
-            'error': f'Project path does not exist: {project_path}'
+            "success": False,
+            "overall_status": "failure",
+            "error": f"Project path does not exist: {project_path}",
         }
 
     if not keystore_path_obj.exists():
         return {
-            'success': False,
-            'overall_status': 'failure',
-            'error': f'Keystore file does not exist: {keystore_path}'
+            "success": False,
+            "overall_status": "failure",
+            "error": f"Keystore file does not exist: {keystore_path}",
         }
 
     # Check for gradlew
-    gradlew = project_path_obj / 'gradlew'
+    gradlew = project_path_obj / "gradlew"
     if not gradlew.exists():
         return {
-            'success': False,
-            'overall_status': 'failure',
-            'error': 'gradlew not found in project root',
-            'suggestion': 'This tool requires Gradle wrapper to be present'
+            "success": False,
+            "overall_status": "failure",
+            "error": "gradlew not found in project root",
+            "suggestion": "This tool requires Gradle wrapper to be present",
         }
 
     steps = []
@@ -1645,118 +1640,142 @@ def test_deployment_workflow(
 
     # Step 1: Environment Setup
     step_start = time.time()
-    steps.append({
-        'step': 'Environment Setup',
-        'status': 'pass',
-        'duration_seconds': round(time.time() - step_start, 1),
-        'message': 'Gradle wrapper found and executable'
-    })
+    steps.append(
+        {
+            "step": "Environment Setup",
+            "status": "pass",
+            "duration_seconds": round(time.time() - step_start, 1),
+            "message": "Gradle wrapper found and executable",
+        }
+    )
 
     # Step 2: Build AAB
     step_start = time.time()
     try:
         # Set environment variables for signing
         env = os.environ.copy()
-        env['SIGNING_KEY_STORE_PATH'] = str(keystore_path_obj)
-        env['SIGNING_STORE_PASSWORD'] = store_password
-        env['SIGNING_KEY_ALIAS'] = key_alias
-        env['SIGNING_KEY_PASSWORD'] = key_password
+        env["SIGNING_KEY_STORE_PATH"] = str(keystore_path_obj)
+        env["SIGNING_STORE_PASSWORD"] = store_password
+        env["SIGNING_KEY_ALIAS"] = key_alias
+        env["SIGNING_KEY_PASSWORD"] = key_password
 
         # Run Gradle build
         result = subprocess.run(
-            [str(gradlew), 'bundleRelease'],
+            [str(gradlew), "bundleRelease"],
             cwd=str(project_path_obj),
             env=env,
             capture_output=True,
             text=True,
-            timeout=600  # 10 minutes
+            timeout=600,  # 10 minutes
         )
 
         if result.returncode != 0:
-            steps.append({
-                'step': 'Build AAB',
-                'status': 'fail',
-                'duration_seconds': round(time.time() - step_start, 1),
-                'message': 'Failed to build release AAB',
-                'details': result.stderr[-500:] if result.stderr else result.stdout[-500:]  # Last 500 chars
-            })
+            steps.append(
+                {
+                    "step": "Build AAB",
+                    "status": "fail",
+                    "duration_seconds": round(time.time() - step_start, 1),
+                    "message": "Failed to build release AAB",
+                    "details": result.stderr[-500:]
+                    if result.stderr
+                    else result.stdout[-500:],  # Last 500 chars
+                }
+            )
 
             return {
-                'success': False,
-                'overall_status': 'failure',
-                'steps': steps,
-                'total_duration_seconds': round(time.time() - total_start_time, 1),
-                'build_successful': False,
-                'error': 'Gradle build failed',
-                'gradle_output': result.stderr[-1000:] if result.stderr else result.stdout[-1000:]
+                "success": False,
+                "overall_status": "failure",
+                "steps": steps,
+                "total_duration_seconds": round(time.time() - total_start_time, 1),
+                "build_successful": False,
+                "error": "Gradle build failed",
+                "gradle_output": result.stderr[-1000:]
+                if result.stderr
+                else result.stdout[-1000:],
             }
 
         # Find the AAB file
-        aab_path = project_path_obj / 'app' / 'build' / 'outputs' / 'bundle' / 'release' / 'app-release.aab'
+        aab_path = (
+            project_path_obj
+            / "app"
+            / "build"
+            / "outputs"
+            / "bundle"
+            / "release"
+            / "app-release.aab"
+        )
         if not aab_path.exists():
-            steps.append({
-                'step': 'Build AAB',
-                'status': 'fail',
-                'duration_seconds': round(time.time() - step_start, 1),
-                'message': 'AAB file was not generated'
-            })
+            steps.append(
+                {
+                    "step": "Build AAB",
+                    "status": "fail",
+                    "duration_seconds": round(time.time() - step_start, 1),
+                    "message": "AAB file was not generated",
+                }
+            )
 
             return {
-                'success': False,
-                'overall_status': 'failure',
-                'steps': steps,
-                'total_duration_seconds': round(time.time() - total_start_time, 1),
-                'build_successful': False,
-                'aab_generated': False,
-                'error': 'AAB file not found after build'
+                "success": False,
+                "overall_status": "failure",
+                "steps": steps,
+                "total_duration_seconds": round(time.time() - total_start_time, 1),
+                "build_successful": False,
+                "aab_generated": False,
+                "error": "AAB file not found after build",
             }
 
         aab_size_mb = round(aab_path.stat().st_size / (1024 * 1024), 2)
 
-        steps.append({
-            'step': 'Build AAB',
-            'status': 'pass',
-            'duration_seconds': round(time.time() - step_start, 1),
-            'message': 'Successfully built release AAB',
-            'details': {
-                'task': 'bundleRelease',
-                'output_file': str(aab_path.relative_to(project_path_obj)),
-                'file_size_mb': aab_size_mb
+        steps.append(
+            {
+                "step": "Build AAB",
+                "status": "pass",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "Successfully built release AAB",
+                "details": {
+                    "task": "bundleRelease",
+                    "output_file": str(aab_path.relative_to(project_path_obj)),
+                    "file_size_mb": aab_size_mb,
+                },
             }
-        })
+        )
 
     except subprocess.TimeoutExpired:
-        steps.append({
-            'step': 'Build AAB',
-            'status': 'fail',
-            'duration_seconds': 600,
-            'message': 'Build timed out after 10 minutes'
-        })
+        steps.append(
+            {
+                "step": "Build AAB",
+                "status": "fail",
+                "duration_seconds": 600,
+                "message": "Build timed out after 10 minutes",
+            }
+        )
 
         return {
-            'success': False,
-            'overall_status': 'failure',
-            'steps': steps,
-            'total_duration_seconds': round(time.time() - total_start_time, 1),
-            'build_successful': False,
-            'error': 'Build timed out'
+            "success": False,
+            "overall_status": "failure",
+            "steps": steps,
+            "total_duration_seconds": round(time.time() - total_start_time, 1),
+            "build_successful": False,
+            "error": "Build timed out",
         }
 
     except Exception as e:
-        steps.append({
-            'step': 'Build AAB',
-            'status': 'fail',
-            'duration_seconds': round(time.time() - step_start, 1),
-            'message': f'Unexpected error during build: {str(e)}'
-        })
+        steps.append(
+            {
+                "step": "Build AAB",
+                "status": "fail",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": f"Unexpected error during build: {str(e)}",
+            }
+        )
 
         return {
-            'success': False,
-            'overall_status': 'failure',
-            'steps': steps,
-            'total_duration_seconds': round(time.time() - total_start_time, 1),
-            'build_successful': False,
-            'error': str(e)
+            "success": False,
+            "overall_status": "failure",
+            "steps": steps,
+            "total_duration_seconds": round(time.time() - total_start_time, 1),
+            "build_successful": False,
+            "error": str(e),
         }
 
     # Step 3: Verify Signing
@@ -1764,86 +1783,95 @@ def test_deployment_workflow(
     try:
         # Use jarsigner to verify signing
         verify_result = subprocess.run(
-            ['jarsigner', '-verify', '-verbose', str(aab_path)],
+            ["jarsigner", "-verify", "-verbose", str(aab_path)],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
 
-        if 'jar verified' in verify_result.stdout.lower():
-            steps.append({
-                'step': 'Verify Signing',
-                'status': 'pass',
-                'duration_seconds': round(time.time() - step_start, 1),
-                'message': 'AAB is properly signed'
-            })
+        if "jar verified" in verify_result.stdout.lower():
+            steps.append(
+                {
+                    "step": "Verify Signing",
+                    "status": "pass",
+                    "duration_seconds": round(time.time() - step_start, 1),
+                    "message": "AAB is properly signed",
+                }
+            )
             signing_successful = True
         else:
-            steps.append({
-                'step': 'Verify Signing',
-                'status': 'fail',
-                'duration_seconds': round(time.time() - step_start, 1),
-                'message': 'AAB signing verification failed',
-                'details': verify_result.stdout[:500]
-            })
+            steps.append(
+                {
+                    "step": "Verify Signing",
+                    "status": "fail",
+                    "duration_seconds": round(time.time() - step_start, 1),
+                    "message": "AAB signing verification failed",
+                    "details": verify_result.stdout[:500],
+                }
+            )
             signing_successful = False
 
     except FileNotFoundError:
-        steps.append({
-            'step': 'Verify Signing',
-            'status': 'skipped',
-            'duration_seconds': round(time.time() - step_start, 1),
-            'message': 'jarsigner not found - skipping signature verification'
-        })
+        steps.append(
+            {
+                "step": "Verify Signing",
+                "status": "skipped",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "jarsigner not found - skipping signature verification",
+            }
+        )
         signing_successful = None  # Unknown
 
     except Exception as e:
-        steps.append({
-            'step': 'Verify Signing',
-            'status': 'fail',
-            'duration_seconds': round(time.time() - step_start, 1),
-            'message': f'Error verifying signature: {str(e)}'
-        })
+        steps.append(
+            {
+                "step": "Verify Signing",
+                "status": "fail",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": f"Error verifying signature: {str(e)}",
+            }
+        )
         signing_successful = False
 
     # Step 4: Upload to Play Store (dry run)
     if dry_run:
-        steps.append({
-            'step': 'Upload to Play Store',
-            'status': 'skipped',
-            'message': 'Skipped due to dry_run=true'
-        })
+        steps.append(
+            {
+                "step": "Upload to Play Store",
+                "status": "skipped",
+                "message": "Skipped due to dry_run=true",
+            }
+        )
 
     errors = []
     warnings = []
     ready_for_deployment = signing_successful is not False
 
     if not ready_for_deployment:
-        errors.append('AAB is not properly signed')
+        errors.append("AAB is not properly signed")
 
     next_steps = []
     if ready_for_deployment:
         next_steps = [
-            'AAB generated and signed successfully',
-            'Test the AAB on a real device',
-            'Configure GitHub Secrets and push workflow to deploy'
+            "AAB generated and signed successfully",
+            "Test the AAB on a real device",
+            "Configure GitHub Secrets and push workflow to deploy",
         ]
     else:
-        next_steps = ['Fix signing issues before attempting deployment']
+        next_steps = ["Fix signing issues before attempting deployment"]
 
     return {
-        'success': True,
-        'overall_status': 'success' if ready_for_deployment else 'partial',
-        'steps': steps,
-        'total_duration_seconds': round(time.time() - total_start_time, 1),
-        'build_successful': True,
-        'signing_successful': signing_successful,
-        'aab_generated': True,
-        'aab_path': str(aab_path),
-        'aab_size_mb': aab_size_mb,
-        'errors': errors,
-        'warnings': warnings,
-        'ready_for_deployment': ready_for_deployment,
-        'next_steps': next_steps
+        "success": True,
+        "overall_status": "success" if ready_for_deployment else "partial",
+        "steps": steps,
+        "total_duration_seconds": round(time.time() - total_start_time, 1),
+        "build_successful": True,
+        "signing_successful": signing_successful,
+        "aab_generated": True,
+        "aab_path": str(aab_path),
+        "aab_size_mb": aab_size_mb,
+        "errors": errors,
+        "warnings": warnings,
+        "ready_for_deployment": ready_for_deployment,
+        "next_steps": next_steps,
     }
-

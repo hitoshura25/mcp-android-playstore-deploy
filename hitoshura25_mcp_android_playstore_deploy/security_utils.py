@@ -18,8 +18,7 @@ from threading import Lock
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,13 @@ logger = logging.getLogger(__name__)
 # Input Validation
 # ============================================================================
 
+
 def validate_string_input(
     value: str,
     max_length: int = 1000,
     min_length: int = 0,
     allowed_pattern: Optional[str] = None,
-    field_name: str = "input"
+    field_name: str = "input",
 ) -> str:
     """
     Validate and sanitize string input.
@@ -71,7 +71,7 @@ def validate_numeric_input(
     value: int,
     min_value: Optional[int] = None,
     max_value: Optional[int] = None,
-    field_name: str = "input"
+    field_name: str = "input",
 ) -> int:
     """
     Validate numeric input.
@@ -106,10 +106,9 @@ def validate_numeric_input(
 # Path Traversal Protection
 # ============================================================================
 
+
 def validate_safe_path(
-    requested_path: str,
-    allowed_directory: Path,
-    must_exist: bool = False
+    requested_path: str, allowed_directory: Path, must_exist: bool = False
 ) -> Path:
     """
     Validate that a file path is within allowed directory.
@@ -153,11 +152,12 @@ def validate_safe_path(
 # Command Injection Protection
 # ============================================================================
 
+
 def validate_safe_command(
     command_name: str,
     args: Optional[List[str]],
     allowed_commands: Dict[str, List[str]],
-    allowed_arg_pattern: Optional[str] = None
+    allowed_arg_pattern: Optional[str] = None,
 ) -> List[str]:
     """
     Validate command against whitelist and check arguments for injection.
@@ -188,24 +188,47 @@ def validate_safe_command(
         # Check for shell metacharacters that could enable injection
         # This is a comprehensive list including glob characters and escape sequences
         dangerous_chars = [
-            ';', '&', '|', '$', '`', '\n', '(', ')', '{', '}',
-            '<', '>', '*', '?', '[', ']', '"', "'", '\\'
+            ";",
+            "&",
+            "|",
+            "$",
+            "`",
+            "\n",
+            "(",
+            ")",
+            "{",
+            "}",
+            "<",
+            ">",
+            "*",
+            "?",
+            "[",
+            "]",
+            '"',
+            "'",
+            "\\",
         ]
 
         # Default pattern: alphanumeric, dash, underscore, dot, slash, space
         # Adjust this pattern based on your specific command's needs
         if allowed_arg_pattern is None:
-            allowed_arg_pattern = r'^[a-zA-Z0-9\-_./ ]+$'
+            allowed_arg_pattern = r"^[a-zA-Z0-9\-_./ ]+$"
 
         for arg in args:
             # Negative validation: check for dangerous characters
             if any(char in arg for char in dangerous_chars):
-                logger.warning(f"Blocked command injection attempt (dangerous char): {arg}")
-                raise ValueError(f"Invalid argument contains shell metacharacters: {arg}")
+                logger.warning(
+                    f"Blocked command injection attempt (dangerous char): {arg}"
+                )
+                raise ValueError(
+                    f"Invalid argument contains shell metacharacters: {arg}"
+                )
 
             # Positive validation: ensure only allowed characters
             if not re.match(allowed_arg_pattern, arg):
-                logger.warning(f"Blocked command injection attempt (invalid chars): {arg}")
+                logger.warning(
+                    f"Blocked command injection attempt (invalid chars): {arg}"
+                )
                 raise ValueError(f"Argument contains disallowed characters: {arg}")
 
         cmd.extend(args)
@@ -217,6 +240,7 @@ def validate_safe_command(
 # Rate Limiting
 # ============================================================================
 
+
 class RateLimiter:
     """Simple in-memory rate limiter for protecting against high-speed attacks."""
 
@@ -225,10 +249,7 @@ class RateLimiter:
         self.lock = Lock()
 
     def is_allowed(
-        self,
-        key: str,
-        max_requests: int = 100,
-        window_seconds: int = 60
+        self, key: str, max_requests: int = 100, window_seconds: int = 60
     ) -> bool:
         """
         Check if request is within rate limits.
@@ -246,7 +267,8 @@ class RateLimiter:
 
             # Remove requests outside the current window
             self.requests[key] = [
-                req_time for req_time in self.requests[key]
+                req_time
+                for req_time in self.requests[key]
                 if now - req_time < window_seconds
             ]
 
@@ -281,6 +303,7 @@ def with_rate_limit(max_requests: int = 100, window_seconds: int = 60):
             # This tool is limited to 50 calls per minute
             pass
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -293,13 +316,16 @@ def with_rate_limit(max_requests: int = 100, window_seconds: int = 60):
                 )
 
             return func(*args, **kwargs)
+
         return wrapper
+
     return decorator
 
 
 # ============================================================================
 # Audit Logging
 # ============================================================================
+
 
 def audit_log(func):
     """
@@ -316,23 +342,34 @@ def audit_log(func):
     """
     # Parameter names that should never be logged
     SENSITIVE_PARAM_NAMES = {
-        'password', 'token', 'api_key', 'secret', 'credential',
-        'auth', 'authorization', 'apikey', 'access_token',
-        'refresh_token', 'private_key', 'passphrase'
+        "password",
+        "token",
+        "api_key",
+        "secret",
+        "credential",
+        "auth",
+        "authorization",
+        "apikey",
+        "access_token",
+        "refresh_token",
+        "private_key",
+        "passphrase",
     }
 
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Redact sensitive parameter values
         safe_kwargs = {
-            k: '[REDACTED]' if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100]
+            k: "[REDACTED]" if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100]
             for k, v in kwargs.items()
         }
 
         # Truncate args to avoid logging large data
         safe_args = str(args)[:100]
 
-        logger.info(f"Tool called: {func.__name__} args={safe_args} kwargs={safe_kwargs}")
+        logger.info(
+            f"Tool called: {func.__name__} args={safe_args} kwargs={safe_kwargs}"
+        )
 
         try:
             result = func(*args, **kwargs)
@@ -348,6 +385,7 @@ def audit_log(func):
 # ============================================================================
 # Sensitive Data Redaction
 # ============================================================================
+
 
 def redact_sensitive_data(text: str) -> str:
     """
@@ -366,9 +404,9 @@ def redact_sensitive_data(text: str) -> str:
     """
     patterns = [
         # Email addresses (fixed: [A-Za-z] instead of [A-Z|a-z])
-        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', '[EMAIL_REDACTED]'),
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL_REDACTED]"),
         # US SSN
-        (r'\b\d{3}-\d{2}-\d{4}\b', '[SSN_REDACTED]'),
+        (r"\b\d{3}-\d{2}-\d{4}\b", "[SSN_REDACTED]"),
         # Credit card numbers (basic pattern - may have false positives)
         # NOTE: This is a simple pattern that matches 16-digit numbers.
         # For production, consider:
@@ -376,17 +414,17 @@ def redact_sensitive_data(text: str) -> str:
         # - Handling 13, 14, 15, and 19-digit card numbers
         # - Being more specific about separators
         # This pattern may match transaction IDs and other non-card numbers.
-        (r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b', '[CARD_REDACTED]'),
+        (r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b", "[CARD_REDACTED]"),
         # API keys (common patterns)
-        (r'api[_-]?key[_-]?[=:]?\s*["\']?([a-zA-Z0-9_\-]{20,})', 'api_key=[REDACTED]'),
+        (r'api[_-]?key[_-]?[=:]?\s*["\']?([a-zA-Z0-9_\-]{20,})', "api_key=[REDACTED]"),
         # Passwords in various formats
-        (r'password[_-]?[=:]?\s*["\']?([^\s"\']+)', 'password=[REDACTED]'),
+        (r'password[_-]?[=:]?\s*["\']?([^\s"\']+)', "password=[REDACTED]"),
         # Stripe-style keys
-        (r'(sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{20,}', '[API_KEY_REDACTED]'),
+        (r"(sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{20,}", "[API_KEY_REDACTED]"),
         # AWS keys
-        (r'AKIA[0-9A-Z]{16}', '[AWS_KEY_REDACTED]'),
+        (r"AKIA[0-9A-Z]{16}", "[AWS_KEY_REDACTED]"),
         # JWT tokens (fixed: use + instead of * to require at least one character)
-        (r'eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+', '[JWT_REDACTED]'),
+        (r"eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+", "[JWT_REDACTED]"),
         # IP addresses (if you want to redact them)
         # (r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP_REDACTED]'),
     ]
@@ -402,10 +440,11 @@ def redact_sensitive_data(text: str) -> str:
 # Combined Security Wrapper
 # ============================================================================
 
+
 def secure_tool(
     rate_limit_requests: int = 100,
     rate_limit_window: int = 60,
-    enable_audit_log: bool = True
+    enable_audit_log: bool = True,
 ):
     """
     Combined decorator for common security measures.
@@ -423,6 +462,7 @@ def secure_tool(
             # This tool has rate limiting and audit logging
             pass
     """
+
     def decorator(func):
         wrapped = func
 
@@ -434,4 +474,5 @@ def secure_tool(
         wrapped = with_rate_limit(rate_limit_requests, rate_limit_window)(wrapped)
 
         return wrapped
+
     return decorator
