@@ -43,7 +43,7 @@ Add this configuration:
 ```json
 {
   "mcpServers": {
-    "android-playstore-deploy": {
+    "hitoshura25_mcp_android_playstore_deploy": {
       "command": "uvx",
       "args": ["hitoshura25-mcp-android-playstore-deploy"]
     }
@@ -64,7 +64,7 @@ In Claude Desktop, ask:
 What MCP servers are available?
 ```
 
-You should see `android-playstore-deploy` in the list. If not, check the [Troubleshooting](#troubleshooting) section.
+You should see `hitoshura25_mcp_android_playstore_deploy` in the list. If not, check the [Troubleshooting](#troubleshooting) section.
 
 ## How to Use This MCP Server with Claude
 

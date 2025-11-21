@@ -15,11 +15,26 @@ Add this to your Claude Desktop config file:
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
+**Recommended: Using uvx (no installation required):**
+
 ```json
 {
   "mcpServers": {
     "hitoshura25_mcp_android_playstore_deploy": {
-      "command": "mcp-hitoshura25-mcp-android-playstore-deploy"
+      "command": "uvx",
+      "args": ["hitoshura25-mcp-android-playstore-deploy"]
+    }
+  }
+}
+```
+
+**Alternative: If you installed via pipx/pip:**
+
+```json
+{
+  "mcpServers": {
+    "hitoshura25_mcp_android_playstore_deploy": {
+      "command": "hitoshura25-mcp-android-playstore-deploy"
     }
   }
 }
