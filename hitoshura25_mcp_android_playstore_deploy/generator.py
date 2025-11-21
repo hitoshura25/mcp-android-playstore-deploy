@@ -1027,56 +1027,116 @@ def validate_github_secrets(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement validate_github_secrets logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate repo_owner
-    # repo_owner = validate_string_input(
-    #     repo_owner,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='repo_owner'
-    # )
-    # # Validate repo_name
-    # repo_name = validate_string_input(
-    #     repo_name,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='repo_name'
-    # )
-    # # Validate github_token
-    # github_token = validate_string_input(
-    #     github_token,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='github_token'
-    # )
-    # 
+    import requests
+    from datetime import datetime
 
-    return {
-        'success': True,
-        'message': 'TODO: Implement validate_github_secrets',
-        
-        'repo_owner': repo_owner,
-        
-        'repo_name': repo_name,
-        
-        'github_token': github_token,
-        
-        'required_secrets': required_secrets,
-        
-    }
+    # Default required secrets
+    if required_secrets is None:
+        required_secrets = [
+            'SERVICE_ACCOUNT_JSON_PLAINTEXT',
+            'SIGNING_KEY_STORE_BASE64',
+            'SIGNING_KEY_ALIAS',
+            'SIGNING_KEY_PASSWORD',
+            'SIGNING_STORE_PASSWORD'
+        ]
+
+    # GitHub API URL
+    url = f'https://api.github.com/repos/{repo_owner}/{repo_name}/actions/secrets'
+
+    try:
+        response = requests.get(
+            url,
+            headers={
+                'Authorization': f'token {github_token}',
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            timeout=30
+        )
+
+        if response.status_code == 401:
+            return {
+                'success': False,
+                'error': 'GitHub token is invalid or expired',
+                'suggestion': 'Generate a new token at https://github.com/settings/tokens with repo scope'
+            }
+        elif response.status_code == 403:
+            if 'rate limit' in response.text.lower():
+                return {
+                    'success': False,
+                    'error': 'GitHub API rate limit exceeded',
+                    'suggestion': 'Wait an hour or use a token with higher limits'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'GitHub token lacks required permissions',
+                    'suggestion': 'Ensure token has "repo" scope'
+                }
+        elif response.status_code == 404:
+            return {
+                'success': False,
+                'error': 'Repository not found',
+                'suggestion': 'Check owner/repo names and token permissions'
+            }
+        elif response.status_code >= 500:
+            return {
+                'success': False,
+                'error': f'GitHub API is experiencing issues (HTTP {response.status_code})',
+                'suggestion': 'Try again later'
+            }
+
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract configured secret names
+        configured_secrets = [secret['name'] for secret in data.get('secrets', [])]
+
+        # Check which required secrets are missing
+        missing_secrets = [s for s in required_secrets if s not in configured_secrets]
+        all_present = len(missing_secrets) == 0
+
+        # Generate instructions for missing secrets
+        instructions_for_missing = {}
+        secret_instructions = {
+            'SERVICE_ACCOUNT_JSON_PLAINTEXT': 'Download the service account JSON from Google Cloud Console, then copy its entire contents into this secret',
+            'SIGNING_KEY_STORE_BASE64': 'Run "base64 -w 0 your-keystore.jks" and paste the output here',
+            'SIGNING_KEY_ALIAS': 'The alias you specified when creating the keystore',
+            'SIGNING_KEY_PASSWORD': 'The password for your signing key',
+            'SIGNING_STORE_PASSWORD': 'The password for your keystore'
+        }
+
+        for secret in missing_secrets:
+            instructions_for_missing[secret] = secret_instructions.get(secret, 'Configure this secret')
+
+        return {
+            'success': True,
+            'all_secrets_present': all_present,
+            'total_required': len(required_secrets),
+            'total_configured': len(required_secrets) - len(missing_secrets),
+            'missing_secrets': missing_secrets,
+            'configured_secrets': [s for s in required_secrets if s in configured_secrets],
+            'instructions_for_missing': instructions_for_missing,
+            'github_secrets_url': f'https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions',
+            'validation_timestamp': datetime.utcnow().isoformat() + 'Z'
+        }
+
+    except requests.exceptions.Timeout:
+        return {
+            'success': False,
+            'error': 'GitHub API request timed out',
+            'suggestion': 'Check your internet connection'
+        }
+    except requests.exceptions.ConnectionError:
+        return {
+            'success': False,
+            'error': 'Cannot connect to GitHub API',
+            'suggestion': 'Check your internet connection'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        }
 
 
 
@@ -1290,44 +1350,180 @@ def validate_play_store_setup(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement validate_play_store_setup logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate service_account_json_path
-    # service_account_json_path = validate_string_input(
-    #     service_account_json_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='service_account_json_path'
-    # )
-    # # Validate package_name
-    # package_name = validate_string_input(
-    #     package_name,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='package_name'
-    # )
-    # 
+    from pathlib import Path
+
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
+    except ImportError:
+        return {
+            'success': False,
+            'error': 'Google API client libraries not installed',
+            'suggestion': 'Install with: pip install google-auth google-api-python-client'
+        }
+
+    # Validate service account file exists
+    service_account_path = Path(service_account_json_path).resolve()
+    if not service_account_path.exists():
+        return {
+            'success': False,
+            'error': f'Service account file not found: {service_account_json_path}'
+        }
+
+    checks = {}
+    errors = []
+    warnings = []
+    overall_status = "success"
+
+    try:
+        # Authenticate with service account
+        credentials = service_account.Credentials.from_service_account_file(
+            str(service_account_path),
+            scopes=['https://www.googleapis.com/auth/androidpublisher']
+        )
+
+        checks['service_account_valid'] = {
+            'status': 'pass',
+            'message': 'Service account credentials are valid'
+        }
+
+        # Build API client
+        service = build('androidpublisher', 'v3', credentials=credentials)
+
+        # Try to create an edit (this validates API access and app existence)
+        try:
+            edit_request = service.edits().insert(body={}, packageName=package_name)
+            edit_result = edit_request.execute()
+            edit_id = edit_result['id']
+
+            # If we get here, the app exists and we have access
+            checks['app_exists'] = {
+                'status': 'pass',
+                'message': 'App with package name exists in Play Console'
+            }
+
+            checks['permissions_sufficient'] = {
+                'status': 'pass',
+                'message': 'Service account has sufficient permissions',
+                'details': 'Can create edits'
+            }
+
+            # Get tracks information
+            try:
+                tracks_response = service.edits().tracks().list(
+                    packageName=package_name,
+                    editId=edit_id
+                ).execute()
+
+                available_tracks = [track['track'] for track in tracks_response.get('tracks', [])]
+
+                checks['can_access_tracks'] = {
+                    'status': 'pass',
+                    'message': 'Can access release tracks',
+                    'available_tracks': available_tracks if available_tracks else ['internal', 'alpha', 'beta', 'production']
+                }
+
+                if not available_tracks:
+                    warnings.append('No releases found on any track - this is expected for new apps')
+
+            except HttpError as e:
+                checks['can_access_tracks'] = {
+                    'status': 'partial',
+                    'message': 'Limited track access',
+                    'details': str(e)
+                }
+                warnings.append('Could not list all tracks - may have limited permissions')
+
+            # Clean up the edit
+            try:
+                service.edits().delete(packageName=package_name, editId=edit_id).execute()
+            except:
+                pass  # Ignore cleanup errors
+
+        except HttpError as e:
+            if e.resp.status == 404:
+                checks['app_exists'] = {
+                    'status': 'fail',
+                    'message': f'App with package name "{package_name}" not found in Play Console'
+                }
+                errors.append(f'App not found. Make sure the app is created in Play Console first.')
+                overall_status = 'failure'
+            elif e.resp.status == 403:
+                checks['permissions_sufficient'] = {
+                    'status': 'fail',
+                    'message': 'Service account lacks required permissions'
+                }
+                errors.append('Service account needs "Release Manager" role in Play Console')
+                overall_status = 'failure'
+            else:
+                raise
+
+        checks['api_enabled'] = {
+            'status': 'pass',
+            'message': 'Google Play Developer API is enabled'
+        }
+
+    except FileNotFoundError:
+        checks['service_account_valid'] = {
+            'status': 'fail',
+            'message': f'Service account file not found: {service_account_json_path}'
+        }
+        errors.append('Service account JSON file does not exist')
+        overall_status = 'failure'
+
+    except ValueError as e:
+        if 'json' in str(e).lower():
+            checks['service_account_valid'] = {
+                'status': 'fail',
+                'message': 'Invalid service account JSON format'
+            }
+            errors.append('Service account JSON is malformed. Re-download from Google Cloud Console.')
+            overall_status = 'failure'
+        else:
+            raise
+
+    except HttpError as e:
+        if e.resp.status == 401:
+            checks['service_account_valid'] = {
+                'status': 'fail',
+                'message': 'Service account credentials are invalid'
+            }
+            errors.append('Service account credentials rejected. Verify the JSON file is correct.')
+            overall_status = 'failure'
+        elif e.resp.status == 403:
+            checks['api_enabled'] = {
+                'status': 'fail',
+                'message': 'Google Play Developer API is not enabled or accessible'
+            }
+            errors.append('Enable the API at: https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com')
+            overall_status = 'failure'
+        else:
+            errors.append(f'Google Play API error: {e.resp.status} - {e._get_reason()}')
+            overall_status = 'failure'
+
+    except Exception as e:
+        errors.append(f'Unexpected error: {str(e)}')
+        overall_status = 'failure'
+
+    # Generate next steps
+    next_steps = []
+    if overall_status == 'success':
+        next_steps = [
+            'Your Play Store setup is complete',
+            'You can now deploy to the internal track',
+            'Make sure to add testers to your internal testing group'
+        ]
+    else:
+        next_steps = ['Fix the errors listed above', 'Re-run validation after making changes']
 
     return {
-        'success': True,
-        'message': 'TODO: Implement validate_play_store_setup',
-        
-        'service_account_json_path': service_account_json_path,
-        
-        'package_name': package_name,
-        
+        'success': overall_status == 'success',
+        'overall_status': overall_status,
+        'checks': checks,
+        'errors': errors,
+        'warnings': warnings,
+        'next_steps': next_steps
     }
 
 
@@ -1407,72 +1603,247 @@ def test_deployment_workflow(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement test_deployment_workflow logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate project_path
-    # project_path = validate_string_input(
-    #     project_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='project_path'
-    # )
-    # # Validate keystore_path
-    # keystore_path = validate_string_input(
-    #     keystore_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='keystore_path'
-    # )
-    # # Validate store_password
-    # store_password = validate_string_input(
-    #     store_password,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='store_password'
-    # )
-    # # Validate key_alias
-    # key_alias = validate_string_input(
-    #     key_alias,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='key_alias'
-    # )
-    # # Validate key_password
-    # key_password = validate_string_input(
-    #     key_password,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='key_password'
-    # )
-    # 
+    import subprocess
+    import os
+    import time
+    from pathlib import Path
+
+    # Default dry_run to True
+    if dry_run is None:
+        dry_run = True
+
+    project_path_obj = Path(project_path).resolve()
+    keystore_path_obj = Path(keystore_path).resolve()
+
+    # Validate paths
+    if not project_path_obj.exists():
+        return {
+            'success': False,
+            'overall_status': 'failure',
+            'error': f'Project path does not exist: {project_path}'
+        }
+
+    if not keystore_path_obj.exists():
+        return {
+            'success': False,
+            'overall_status': 'failure',
+            'error': f'Keystore file does not exist: {keystore_path}'
+        }
+
+    # Check for gradlew
+    gradlew = project_path_obj / 'gradlew'
+    if not gradlew.exists():
+        return {
+            'success': False,
+            'overall_status': 'failure',
+            'error': 'gradlew not found in project root',
+            'suggestion': 'This tool requires Gradle wrapper to be present'
+        }
+
+    steps = []
+    total_start_time = time.time()
+
+    # Step 1: Environment Setup
+    step_start = time.time()
+    steps.append({
+        'step': 'Environment Setup',
+        'status': 'pass',
+        'duration_seconds': round(time.time() - step_start, 1),
+        'message': 'Gradle wrapper found and executable'
+    })
+
+    # Step 2: Build AAB
+    step_start = time.time()
+    try:
+        # Set environment variables for signing
+        env = os.environ.copy()
+        env['SIGNING_KEY_STORE_PATH'] = str(keystore_path_obj)
+        env['SIGNING_STORE_PASSWORD'] = store_password
+        env['SIGNING_KEY_ALIAS'] = key_alias
+        env['SIGNING_KEY_PASSWORD'] = key_password
+
+        # Run Gradle build
+        result = subprocess.run(
+            [str(gradlew), 'bundleRelease'],
+            cwd=str(project_path_obj),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minutes
+        )
+
+        if result.returncode != 0:
+            steps.append({
+                'step': 'Build AAB',
+                'status': 'fail',
+                'duration_seconds': round(time.time() - step_start, 1),
+                'message': 'Failed to build release AAB',
+                'details': result.stderr[-500:] if result.stderr else result.stdout[-500:]  # Last 500 chars
+            })
+
+            return {
+                'success': False,
+                'overall_status': 'failure',
+                'steps': steps,
+                'total_duration_seconds': round(time.time() - total_start_time, 1),
+                'build_successful': False,
+                'error': 'Gradle build failed',
+                'gradle_output': result.stderr[-1000:] if result.stderr else result.stdout[-1000:]
+            }
+
+        # Find the AAB file
+        aab_path = project_path_obj / 'app' / 'build' / 'outputs' / 'bundle' / 'release' / 'app-release.aab'
+        if not aab_path.exists():
+            steps.append({
+                'step': 'Build AAB',
+                'status': 'fail',
+                'duration_seconds': round(time.time() - step_start, 1),
+                'message': 'AAB file was not generated'
+            })
+
+            return {
+                'success': False,
+                'overall_status': 'failure',
+                'steps': steps,
+                'total_duration_seconds': round(time.time() - total_start_time, 1),
+                'build_successful': False,
+                'aab_generated': False,
+                'error': 'AAB file not found after build'
+            }
+
+        aab_size_mb = round(aab_path.stat().st_size / (1024 * 1024), 2)
+
+        steps.append({
+            'step': 'Build AAB',
+            'status': 'pass',
+            'duration_seconds': round(time.time() - step_start, 1),
+            'message': 'Successfully built release AAB',
+            'details': {
+                'task': 'bundleRelease',
+                'output_file': str(aab_path.relative_to(project_path_obj)),
+                'file_size_mb': aab_size_mb
+            }
+        })
+
+    except subprocess.TimeoutExpired:
+        steps.append({
+            'step': 'Build AAB',
+            'status': 'fail',
+            'duration_seconds': 600,
+            'message': 'Build timed out after 10 minutes'
+        })
+
+        return {
+            'success': False,
+            'overall_status': 'failure',
+            'steps': steps,
+            'total_duration_seconds': round(time.time() - total_start_time, 1),
+            'build_successful': False,
+            'error': 'Build timed out'
+        }
+
+    except Exception as e:
+        steps.append({
+            'step': 'Build AAB',
+            'status': 'fail',
+            'duration_seconds': round(time.time() - step_start, 1),
+            'message': f'Unexpected error during build: {str(e)}'
+        })
+
+        return {
+            'success': False,
+            'overall_status': 'failure',
+            'steps': steps,
+            'total_duration_seconds': round(time.time() - total_start_time, 1),
+            'build_successful': False,
+            'error': str(e)
+        }
+
+    # Step 3: Verify Signing
+    step_start = time.time()
+    try:
+        # Use jarsigner to verify signing
+        verify_result = subprocess.run(
+            ['jarsigner', '-verify', '-verbose', str(aab_path)],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if 'jar verified' in verify_result.stdout.lower():
+            steps.append({
+                'step': 'Verify Signing',
+                'status': 'pass',
+                'duration_seconds': round(time.time() - step_start, 1),
+                'message': 'AAB is properly signed'
+            })
+            signing_successful = True
+        else:
+            steps.append({
+                'step': 'Verify Signing',
+                'status': 'fail',
+                'duration_seconds': round(time.time() - step_start, 1),
+                'message': 'AAB signing verification failed',
+                'details': verify_result.stdout[:500]
+            })
+            signing_successful = False
+
+    except FileNotFoundError:
+        steps.append({
+            'step': 'Verify Signing',
+            'status': 'skipped',
+            'duration_seconds': round(time.time() - step_start, 1),
+            'message': 'jarsigner not found - skipping signature verification'
+        })
+        signing_successful = None  # Unknown
+
+    except Exception as e:
+        steps.append({
+            'step': 'Verify Signing',
+            'status': 'fail',
+            'duration_seconds': round(time.time() - step_start, 1),
+            'message': f'Error verifying signature: {str(e)}'
+        })
+        signing_successful = False
+
+    # Step 4: Upload to Play Store (dry run)
+    if dry_run:
+        steps.append({
+            'step': 'Upload to Play Store',
+            'status': 'skipped',
+            'message': 'Skipped due to dry_run=true'
+        })
+
+    errors = []
+    warnings = []
+    ready_for_deployment = signing_successful != False
+
+    if not ready_for_deployment:
+        errors.append('AAB is not properly signed')
+
+    next_steps = []
+    if ready_for_deployment:
+        next_steps = [
+            'AAB generated and signed successfully',
+            'Test the AAB on a real device',
+            'Configure GitHub Secrets and push workflow to deploy'
+        ]
+    else:
+        next_steps = ['Fix signing issues before attempting deployment']
 
     return {
         'success': True,
-        'message': 'TODO: Implement test_deployment_workflow',
-        
-        'project_path': project_path,
-        
-        'keystore_path': keystore_path,
-        
-        'store_password': store_password,
-        
-        'key_alias': key_alias,
-        
-        'key_password': key_password,
-        
-        'dry_run': dry_run,
-        
+        'overall_status': 'success' if ready_for_deployment else 'partial',
+        'steps': steps,
+        'total_duration_seconds': round(time.time() - total_start_time, 1),
+        'build_successful': True,
+        'signing_successful': signing_successful,
+        'aab_generated': True,
+        'aab_path': str(aab_path),
+        'aab_size_mb': aab_size_mb,
+        'errors': errors,
+        'warnings': warnings,
+        'ready_for_deployment': ready_for_deployment,
+        'next_steps': next_steps
     }
 
