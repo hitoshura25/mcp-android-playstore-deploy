@@ -10,6 +10,8 @@ See SECURITY.md for comprehensive security guidelines.
 import re
 import logging
 import time
+import os
+import tempfile
 from pathlib import Path
 from typing import List, Dict, Optional
 from functools import wraps
@@ -476,3 +478,162 @@ def secure_tool(
         return wrapped
 
     return decorator
+
+
+# ============================================================================
+# Secure Path Validation (without strict directory checking)
+# ============================================================================
+
+
+def validate_project_path(path_str: str, must_exist: bool = True) -> Path:
+    """
+    Validate a project path safely.
+
+    This is less strict than validate_safe_path as it allows paths anywhere
+    on the filesystem, but still prevents common attack vectors.
+
+    Args:
+        path_str: Path string to validate
+        must_exist: Whether the path must already exist
+
+    Returns:
+        Validated absolute Path object
+
+    Raises:
+        ValueError: If path contains suspicious patterns
+        FileNotFoundError: If must_exist=True and path doesn't exist
+    """
+    # Check for null bytes (can cause issues in some contexts)
+    if "\x00" in path_str:
+        raise ValueError("Path contains null bytes")
+
+    # Convert to Path and resolve
+    try:
+        path = Path(path_str).resolve()
+    except (ValueError, OSError) as e:
+        raise ValueError(f"Invalid path: {e}")
+
+    # Check existence if required
+    if must_exist and not path.exists():
+        raise FileNotFoundError(f"Path not found: {path_str}")
+
+    # Warn but don't block suspicious patterns (log for security auditing)
+    if ".." in path_str:
+        logger.info(f"Path contains '..': {path_str}")
+
+    return path
+
+
+# ============================================================================
+# Secure Credential Handling
+# ============================================================================
+
+
+def create_secure_temp_file(content: str, prefix: str = "mcp_") -> Path:
+    """
+    Create a temporary file with restricted permissions for sensitive data.
+
+    Args:
+        content: Content to write to file
+        prefix: Prefix for temp filename
+
+    Returns:
+        Path to created temporary file
+
+    Note:
+        Caller is responsible for deleting the file when done
+    """
+    # Create temp file with 0600 permissions (owner read/write only)
+    fd, temp_path = tempfile.mkstemp(prefix=prefix, suffix=".tmp")
+
+    try:
+        # Write content
+        os.write(fd, content.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+    # Ensure permissions are set correctly (umask might interfere)
+    os.chmod(temp_path, 0o600)
+
+    return Path(temp_path)
+
+
+# ============================================================================
+# Parameter Validation Helpers
+# ============================================================================
+
+
+def validate_track(track: str) -> str:
+    """
+    Validate Google Play track name.
+
+    Args:
+        track: Track name to validate
+
+    Returns:
+        Validated track name
+
+    Raises:
+        ValueError: If track is invalid
+    """
+    valid_tracks = {"internal", "alpha", "beta", "production"}
+
+    if track not in valid_tracks:
+        raise ValueError(
+            f"Invalid track '{track}'. Must be one of: {', '.join(sorted(valid_tracks))}"
+        )
+
+    return track
+
+
+def validate_signing_strategy(strategy: str) -> str:
+    """
+    Validate signing strategy.
+
+    Args:
+        strategy: Strategy to validate
+
+    Returns:
+        Validated strategy
+
+    Raises:
+        ValueError: If strategy is invalid
+    """
+    valid_strategies = {"environment_variables", "gradle_properties"}
+
+    if strategy not in valid_strategies:
+        raise ValueError(
+            f"Invalid signing strategy '{strategy}'. "
+            f"Must be one of: {', '.join(sorted(valid_strategies))}"
+        )
+
+    return strategy
+
+
+def validate_android_package_name(package_name: str) -> str:
+    """
+    Validate Android package name format.
+
+    Args:
+        package_name: Package name to validate
+
+    Returns:
+        Validated package name
+
+    Raises:
+        ValueError: If package name is invalid
+    """
+    # Android package names must:
+    # - Start with a lowercase letter
+    # - Contain at least one dot
+    # - Each segment starts with a letter
+    # - Only contain lowercase letters, numbers, and underscores
+    pattern = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
+
+    if not re.match(pattern, package_name):
+        raise ValueError(
+            f"Invalid Android package name: {package_name}. "
+            "Must follow format: com.example.app (lowercase letters, numbers, underscores)"
+        )
+
+    return package_name

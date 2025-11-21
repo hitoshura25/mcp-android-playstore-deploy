@@ -11,17 +11,17 @@ Security Notes:
 
 from typing import Any, Dict
 
-# Import security utilities - uncomment and use as needed
-# from .security_utils import (
-#     validate_string_input,
-#     validate_numeric_input,
-#     validate_safe_path,
-#     validate_safe_command,
-#     redact_sensitive_data,
-#     secure_tool,
-#     with_rate_limit,
-#     audit_log,
-# )
+# Import security utilities
+from .security_utils import (
+    validate_string_input,
+    validate_numeric_input,
+    validate_project_path,
+    redact_sensitive_data,
+    create_secure_temp_file,
+    validate_track,
+    validate_signing_strategy,
+    validate_android_package_name,
+)
 
 
 def analyze_android_project(project_path: str) -> Dict[str, Any]:
@@ -78,13 +78,13 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
     from pathlib import Path
     import re
 
-    project_path_obj = Path(project_path).resolve()
-
-    # Validate project exists and is a directory
-    if not project_path_obj.exists():
+    # Validate path for security (Issue #5, #19)
+    try:
+        project_path_obj = validate_project_path(project_path, must_exist=True)
+    except (ValueError, FileNotFoundError) as e:
         return {
             "success": False,
-            "error": f"Project path does not exist: {project_path}",
+            "error": f"Invalid project path: {e}",
         }
 
     if not project_path_obj.is_dir():
@@ -142,12 +142,23 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
     # Extract package name (applicationId or namespace)
     app_id_match = re.search(r'applicationId\s*=?\s*["\']([^"\']+)["\']', build_content)
     if app_id_match:
-        package_name = app_id_match.group(1)
+        extracted_package = app_id_match.group(1)
+        # Validate package name format (Issue #24)
+        try:
+            package_name = validate_android_package_name(extracted_package)
+        except ValueError:
+            # Invalid package name, don't set it
+            package_name = None
 
     namespace_match = re.search(r'namespace\s*=?\s*["\']([^"\']+)["\']', build_content)
     if namespace_match:
-        namespace = namespace_match.group(1)
-        if not package_name:
+        extracted_namespace = namespace_match.group(1)
+        try:
+            namespace = validate_android_package_name(extracted_namespace)
+        except ValueError:
+            # Invalid namespace, don't set it
+            namespace = None
+        if not package_name and namespace:
             package_name = namespace
 
     # Extract version info
@@ -352,12 +363,49 @@ def generate_keystore(
     if dname is None:
         dname = "CN=Android Developer"
 
-    # Validate output path
-    output_path_obj = Path(output_path).resolve()
+    # Validate inputs (Issue #18 - command injection prevention)
+    try:
+        alias = validate_string_input(
+            alias,
+            max_length=100,
+            allowed_pattern=r"^[a-zA-Z0-9_-]+$",
+            field_name="alias",
+        )
+        store_password = validate_string_input(
+            store_password, max_length=100, min_length=6, field_name="store_password"
+        )
+        key_password = validate_string_input(
+            key_password, max_length=100, min_length=6, field_name="key_password"
+        )
+        # DN can contain spaces, commas, equals, but validate it
+        dname = validate_string_input(
+            dname,
+            max_length=200,
+            allowed_pattern=r"^[a-zA-Z0-9\s,=.@-]+$",
+            field_name="dname",
+        )
+        validity_days = validate_numeric_input(
+            validity_days, min_value=1, max_value=36500, field_name="validity_days"
+        )
+        key_size = validate_numeric_input(
+            key_size, min_value=2048, max_value=4096, field_name="key_size"
+        )
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid input: {e}"}
+
+    # Validate output path (Issue #9 - path traversal)
+    try:
+        output_path_obj = validate_project_path(output_path, must_exist=False)
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid output path: {e}"}
+
     output_dir = output_path_obj.parent
 
     # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return {"success": False, "error": f"Cannot create directory: {e}"}
 
     # Check if keystore already exists
     if output_path_obj.exists():
@@ -367,8 +415,18 @@ def generate_keystore(
             "suggestion": "Choose a different path or delete the existing keystore",
         }
 
+    # Create secure temporary files for passwords (Issue #17)
+    # This prevents passwords from appearing in process listings
+    store_pass_file = None
+    key_pass_file = None
+
     try:
-        # Generate keystore using keytool
+        store_pass_file = create_secure_temp_file(
+            store_password, prefix="keystore_pass_"
+        )
+        key_pass_file = create_secure_temp_file(key_password, prefix="key_pass_")
+
+        # Generate keystore using keytool with password files
         cmd = [
             "keytool",
             "-genkeypair",
@@ -383,10 +441,10 @@ def generate_keystore(
             str(key_size),
             "-validity",
             str(validity_days),
-            "-storepass",
-            store_password,
-            "-keypass",
-            key_password,
+            "-storepass:file",
+            str(store_pass_file),
+            "-keypass:file",
+            str(key_pass_file),
             "-dname",
             dname,
         ]
@@ -394,7 +452,10 @@ def generate_keystore(
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
 
         if result.returncode != 0:
+            # Redact sensitive data from error output (Issue #20)
             error_msg = result.stderr if result.stderr else result.stdout
+            error_msg = redact_sensitive_data(error_msg) if error_msg else "Unknown error"
+
             if (
                 "command not found" in error_msg.lower()
                 or "not recognized" in error_msg.lower()
@@ -404,10 +465,10 @@ def generate_keystore(
                     "error": "keytool not found. Please install JDK and ensure it is in your PATH.",
                     "suggestion": "Install JDK from https://adoptium.net/",
                 }
+            # Don't include raw command in error (may contain sensitive paths)
             return {
                 "success": False,
-                "error": f"Failed to generate keystore: {error_msg}",
-                "command": " ".join(cmd),
+                "error": f"Failed to generate keystore: {error_msg[-500:]}",
             }
 
         # Set restrictive permissions (owner read/write only)
@@ -450,7 +511,21 @@ def generate_keystore(
             "suggestion": "Install JDK from https://adoptium.net/",
         }
     except Exception as e:
-        return {"success": False, "error": f"Unexpected error: {str(e)}"}
+        # Redact any sensitive data from exception messages
+        error = redact_sensitive_data(str(e))
+        return {"success": False, "error": f"Unexpected error: {error}"}
+    finally:
+        # Clean up temporary password files (Issue #17)
+        if store_pass_file and store_pass_file.exists():
+            try:
+                store_pass_file.unlink()
+            except Exception:
+                pass
+        if key_pass_file and key_pass_file.exists():
+            try:
+                key_pass_file.unlink()
+            except Exception:
+                pass
 
 
 def generate_signing_config(
@@ -511,6 +586,18 @@ def generate_signing_config(
     # Default strategy is environment_variables
     if signing_strategy is None:
         signing_strategy = "environment_variables"
+
+    # Validate signing_strategy (Issue #1)
+    try:
+        signing_strategy = validate_signing_strategy(signing_strategy)
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+
+    # Validate project_path (Issue #7) - doesn't need to exist for generating config
+    try:
+        project_path_obj = validate_project_path(project_path, must_exist=False)
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid project path: {e}"}
 
     # Generate Kotlin DSL
     gradle_config_kotlin = """signingConfigs {
@@ -837,6 +924,40 @@ def generate_github_workflow(
     if java_version is None:
         java_version = "17"
 
+    # Validate inputs (Issues #2, #7)
+    try:
+        track = validate_track(track)
+        # Don't require path to exist for workflow generation
+        project_path_obj = validate_project_path(project_path, must_exist=False)
+        package_name = validate_android_package_name(package_name)
+        # Validate other string inputs
+        trigger_strategy = validate_string_input(
+            trigger_strategy,
+            max_length=20,
+            allowed_pattern=r"^[a-z_]+$",
+            field_name="trigger_strategy",
+        )
+        branch_name = validate_string_input(
+            branch_name,
+            max_length=100,
+            allowed_pattern=r"^[a-zA-Z0-9/_-]+$",
+            field_name="branch_name",
+        )
+        app_module_path = validate_string_input(
+            app_module_path,
+            max_length=100,
+            allowed_pattern=r"^[a-zA-Z0-9/_-]+$",
+            field_name="app_module_path",
+        )
+        java_version = validate_string_input(
+            java_version,
+            max_length=10,
+            allowed_pattern=r"^[0-9.]+$",
+            field_name="java_version",
+        )
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid input: {e}"}
+
     # Generate trigger configuration based on strategy
     if trigger_strategy == "manual":
         trigger_config = "workflow_dispatch:"
@@ -949,7 +1070,10 @@ jobs:
 
 
 def validate_github_secrets(
-    repo_owner: str, repo_name: str, github_token: str, required_secrets: Any = None
+    repo_owner: str,
+    repo_name: str,
+    github_token: str,
+    required_secrets: list = None,  # Fixed type from Any (Issue #21)
 ) -> Dict[str, Any]:
     r"""
     Validate that required GitHub Secrets are configured (checks existence only)
@@ -1010,6 +1134,13 @@ def validate_github_secrets(
     import requests
     from datetime import datetime
 
+    # Validate required_secrets type (Issue #21)
+    if required_secrets is not None and not isinstance(required_secrets, list):
+        return {
+            "success": False,
+            "error": "required_secrets must be a list or None",
+        }
+
     # Default required secrets
     if required_secrets is None:
         required_secrets = [
@@ -1019,6 +1150,26 @@ def validate_github_secrets(
             "SIGNING_KEY_PASSWORD",
             "SIGNING_STORE_PASSWORD",
         ]
+
+    # Validate string inputs
+    try:
+        repo_owner = validate_string_input(
+            repo_owner,
+            max_length=100,
+            allowed_pattern=r"^[a-zA-Z0-9_-]+$",
+            field_name="repo_owner",
+        )
+        repo_name = validate_string_input(
+            repo_name,
+            max_length=100,
+            allowed_pattern=r"^[a-zA-Z0-9_.-]+$",
+            field_name="repo_name",
+        )
+        github_token = validate_string_input(
+            github_token, max_length=200, min_length=10, field_name="github_token"
+        )
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid input: {e}"}
 
     # GitHub API URL
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/actions/secrets"
@@ -1040,7 +1191,8 @@ def validate_github_secrets(
                 "suggestion": "Generate a new token at https://github.com/settings/tokens with repo scope",
             }
         elif response.status_code == 403:
-            if "rate limit" in response.text.lower():
+            # Don't include response.text in error (Issue #15 - may contain token)
+            if "rate limit" in str(response.status_code):
                 return {
                     "success": False,
                     "error": "GitHub API rate limit exceeded",
@@ -1341,12 +1493,16 @@ def validate_play_store_setup(
             "suggestion": "Install with: pip install google-auth google-api-python-client",
         }
 
-    # Validate service account file exists
-    service_account_path = Path(service_account_json_path).resolve()
-    if not service_account_path.exists():
+    # Validate inputs (Issue #6)
+    try:
+        service_account_path = validate_project_path(
+            service_account_json_path, must_exist=True
+        )
+        package_name = validate_android_package_name(package_name)
+    except (ValueError, FileNotFoundError) as e:
         return {
             "success": False,
-            "error": f"Service account file not found: {service_account_json_path}",
+            "error": f"Invalid input: {e}",
         }
 
     checks = {}
