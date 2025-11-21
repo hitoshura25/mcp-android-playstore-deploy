@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_scheme = "post-release"
+
+[project]
+name = "hitoshura25-mcp-android-playstore-deploy"
+description = "MCP server that helps developers set up automated Google Play Store deployment for Android apps"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Vinayak Menon", email = "hitoshura25@users.noreply.github.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "mcp>=1.0.0,<2.0.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+dev = [
+    "hitoshura25-mcp-android-playstore-deploy[test]",
+]
+
+[project.scripts]
+hitoshura25-mcp-android-playstore-deploy = "hitoshura25_mcp_android_playstore_deploy.server:main"
+hitoshura25-mcp-android-playstore-deploy-cli = "hitoshura25_mcp_android_playstore_deploy.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Vinayak Menon/hitoshura25-mcp-android-playstore-deploy"
+Repository = "https://github.com/Vinayak Menon/hitoshura25-mcp-android-playstore-deploy"
+Issues = "https://github.com/Vinayak Menon/hitoshura25-mcp-android-playstore-deploy/issues"
