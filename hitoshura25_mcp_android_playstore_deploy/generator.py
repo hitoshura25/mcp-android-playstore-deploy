@@ -30,7 +30,7 @@ def analyze_android_project(
     project_path: str
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Analyze an Android project to understand its configuration and identify requirements for Play Store deployment
 
     Args:
@@ -274,7 +274,7 @@ def generate_keystore(
     dname: str = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Generate a new Android keystore file for app signing with secure parameters
 
     Args:
@@ -455,7 +455,7 @@ def generate_signing_config(
     signing_strategy: str = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Generate Gradle signing configuration code to add to build.gradle.kts
 
     Args:
@@ -625,7 +625,7 @@ android {
 def setup_service_account_guide(
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Provide interactive step-by-step guide for setting up Google Play Service Account
 
     Args:
@@ -774,7 +774,7 @@ def generate_github_workflow(
     java_version: str = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Generate a complete GitHub Actions workflow file for Play Store deployment
 
     Args:
@@ -971,7 +971,7 @@ def validate_github_secrets(
     required_secrets: Any = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Validate that required GitHub Secrets are configured (checks existence only)
 
     Args:
@@ -1147,7 +1147,7 @@ def create_github_secrets_guide(
     keystore_path: str = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Generate a comprehensive guide for creating all required GitHub Secrets
 
     Args:
@@ -1298,7 +1298,7 @@ def validate_play_store_setup(
     package_name: str
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Validate that Play Store app and API access are properly configured using service account
 
     Args:
@@ -1438,7 +1438,7 @@ def validate_play_store_setup(
             # Clean up the edit
             try:
                 service.edits().delete(packageName=package_name, editId=edit_id).execute()
-            except:
+            except Exception:
                 pass  # Ignore cleanup errors
 
         except HttpError as e:
@@ -1447,7 +1447,7 @@ def validate_play_store_setup(
                     'status': 'fail',
                     'message': f'App with package name "{package_name}" not found in Play Console'
                 }
-                errors.append(f'App not found. Make sure the app is created in Play Console first.')
+                errors.append('App not found. Make sure the app is created in Play Console first.')
                 overall_status = 'failure'
             elif e.resp.status == 403:
                 checks['permissions_sufficient'] = {
@@ -1543,7 +1543,7 @@ def test_deployment_workflow(
     dry_run: bool = None
     
 ) -> Dict[str, Any]:
-    """
+    r"""
     Test the deployment workflow locally without uploading to Play Store
 
     Args:
@@ -1816,7 +1816,7 @@ def test_deployment_workflow(
 
     errors = []
     warnings = []
-    ready_for_deployment = signing_successful != False
+    ready_for_deployment = signing_successful is not False
 
     if not ready_for_deployment:
         errors.append('AAB is not properly signed')

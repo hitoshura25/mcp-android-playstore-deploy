@@ -2,7 +2,6 @@
 Tests for core business logic.
 """
 
-import pytest
 from hitoshura25_mcp_android_playstore_deploy.generator import (
     
     analyze_android_project,

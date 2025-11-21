@@ -135,7 +135,7 @@ def main():
 
     
     # setup_service_account_guide command
-    setup_service_account_guide_parser = subparsers.add_parser(
+    _ = subparsers.add_parser(
         'setup_service_account_guide',
         help='Provide interactive step-by-step guide for setting up Google Play Service Account'
     )
