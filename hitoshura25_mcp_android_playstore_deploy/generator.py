@@ -1698,6 +1698,259 @@ def validate_play_store_setup(
     }
 
 
+# Helper functions for test_deployment_workflow (Issue #28 - Function length)
+# ============================================================================
+
+
+def _validate_deployment_environment(
+    project_path_obj, keystore_path_obj
+) -> Dict[str, Any]:
+    """
+    Validate that the deployment environment is ready.
+
+    Args:
+        project_path_obj: Path object for Android project
+        keystore_path_obj: Path object for keystore file
+
+    Returns:
+        Dict with 'success', 'error', and 'gradlew' keys
+    """
+    if not project_path_obj.exists():
+        return {
+            "success": False,
+            "error": f"Project path does not exist: {project_path_obj}",
+        }
+
+    if not keystore_path_obj.exists():
+        return {
+            "success": False,
+            "error": f"Keystore file does not exist: {keystore_path_obj}",
+        }
+
+    gradlew = project_path_obj / "gradlew"
+    if not gradlew.exists():
+        return {
+            "success": False,
+            "error": "gradlew not found in project root",
+            "suggestion": "This tool requires Gradle wrapper to be present",
+        }
+
+    return {"success": True, "gradlew": gradlew}
+
+
+def _build_release_aab(
+    project_path_obj,
+    keystore_path_obj,
+    store_password: str,
+    key_alias: str,
+    key_password: str,
+    gradlew,
+    step_start: float,
+) -> Dict[str, Any]:
+    """
+    Build the release AAB with signing.
+
+    Args:
+        project_path_obj: Path to Android project
+        keystore_path_obj: Path to keystore
+        store_password: Keystore password
+        key_alias: Key alias
+        key_password: Key password
+        gradlew: Path to gradlew script
+        step_start: Start time for this step
+
+    Returns:
+        Dict with build results including success, aab_path, step info, etc.
+    """
+    import subprocess
+    import os
+    import time
+
+    try:
+        # Set environment variables for signing
+        env = os.environ.copy()
+        env["SIGNING_KEY_STORE_PATH"] = str(keystore_path_obj)
+        env["SIGNING_STORE_PASSWORD"] = store_password
+        env["SIGNING_KEY_ALIAS"] = key_alias
+        env["SIGNING_KEY_PASSWORD"] = key_password
+
+        # Run Gradle build
+        result = subprocess.run(
+            [str(gradlew), "bundleRelease"],
+            cwd=str(project_path_obj),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,  # 10 minutes
+        )
+
+        if result.returncode != 0:
+            # Add null check for stderr/stdout (Issue #12)
+            error_output = "No output available"
+            if result.stderr:
+                error_output = result.stderr[-500:]
+            elif result.stdout:
+                error_output = result.stdout[-500:]
+
+            full_output = "No output available"
+            if result.stderr:
+                full_output = result.stderr[-1000:]
+            elif result.stdout:
+                full_output = result.stdout[-1000:]
+
+            step_info = {
+                "step": "Build AAB",
+                "status": "fail",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "Failed to build release AAB",
+                "details": error_output,
+            }
+
+            return {
+                "success": False,
+                "step_info": step_info,
+                "error": "Gradle build failed",
+                "gradle_output": full_output,
+            }
+
+        # Find the AAB file
+        aab_path = (
+            project_path_obj
+            / "app"
+            / "build"
+            / "outputs"
+            / "bundle"
+            / "release"
+            / "app-release.aab"
+        )
+
+        if not aab_path.exists():
+            step_info = {
+                "step": "Build AAB",
+                "status": "fail",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "AAB file was not generated",
+            }
+
+            return {
+                "success": False,
+                "step_info": step_info,
+                "aab_generated": False,
+                "error": "AAB file not found after build",
+            }
+
+        aab_size_mb = round(aab_path.stat().st_size / (1024 * 1024), 2)
+
+        step_info = {
+            "step": "Build AAB",
+            "status": "pass",
+            "duration_seconds": round(time.time() - step_start, 1),
+            "message": "Successfully built release AAB",
+            "details": {
+                "task": "bundleRelease",
+                "output_file": str(aab_path.relative_to(project_path_obj)),
+                "file_size_mb": aab_size_mb,
+            },
+        }
+
+        return {
+            "success": True,
+            "step_info": step_info,
+            "aab_path": aab_path,
+            "aab_size_mb": aab_size_mb,
+        }
+
+    except subprocess.TimeoutExpired:
+        step_info = {
+            "step": "Build AAB",
+            "status": "fail",
+            "duration_seconds": 600,
+            "message": "Build timed out after 10 minutes",
+        }
+
+        return {
+            "success": False,
+            "step_info": step_info,
+            "error": "Build timed out",
+        }
+
+    except Exception as e:
+        step_info = {
+            "step": "Build AAB",
+            "status": "fail",
+            "duration_seconds": round(time.time() - step_start, 1),
+            "message": f"Unexpected error during build: {str(e)}",
+        }
+
+        return {
+            "success": False,
+            "step_info": step_info,
+            "error": str(e),
+        }
+
+
+def _verify_aab_signature(aab_path, step_start: float) -> Dict[str, Any]:
+    """
+    Verify the AAB signature using jarsigner.
+
+    Args:
+        aab_path: Path to the AAB file
+        step_start: Start time for this step
+
+    Returns:
+        Dict with verification results including step info and signing_successful
+    """
+    import subprocess
+    import time
+
+    try:
+        # Use jarsigner to verify signing
+        verify_result = subprocess.run(
+            ["jarsigner", "-verify", "-verbose", str(aab_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        # Add null check for stdout (Issue #12)
+        verify_output = verify_result.stdout or ""
+        if "jar verified" in verify_output.lower():
+            step_info = {
+                "step": "Verify Signing",
+                "status": "pass",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "AAB is properly signed",
+            }
+            return {"step_info": step_info, "signing_successful": True}
+        else:
+            step_info = {
+                "step": "Verify Signing",
+                "status": "fail",
+                "duration_seconds": round(time.time() - step_start, 1),
+                "message": "AAB signing verification failed",
+                "details": verify_output[:500],
+            }
+            return {"step_info": step_info, "signing_successful": False}
+
+    except FileNotFoundError:
+        step_info = {
+            "step": "Verify Signing",
+            "status": "skipped",
+            "duration_seconds": round(time.time() - step_start, 1),
+            "message": "jarsigner not found - skipping signature verification",
+        }
+        return {"step_info": step_info, "signing_successful": None}
+
+    except Exception as e:
+        step_info = {
+            "step": "Verify Signing",
+            "status": "fail",
+            "duration_seconds": round(time.time() - step_start, 1),
+            "message": f"Error verifying signature: {str(e)}",
+        }
+        return {"step_info": step_info, "signing_successful": False}
+
+
 def test_deployment_workflow(
     project_path: str,
     keystore_path: str,
@@ -1769,8 +2022,6 @@ def test_deployment_workflow(
 
                 return {'success': True, 'data': data}
     """
-    import subprocess
-    import os
     import time
     from pathlib import Path
 
@@ -1781,35 +2032,26 @@ def test_deployment_workflow(
     project_path_obj = Path(project_path).resolve()
     keystore_path_obj = Path(keystore_path).resolve()
 
-    # Validate paths
-    if not project_path_obj.exists():
-        return {
-            "success": False,
-            "overall_status": "failure",
-            "error": f"Project path does not exist: {project_path}",
-        }
-
-    if not keystore_path_obj.exists():
-        return {
-            "success": False,
-            "overall_status": "failure",
-            "error": f"Keystore file does not exist: {keystore_path}",
-        }
-
-    # Check for gradlew
-    gradlew = project_path_obj / "gradlew"
-    if not gradlew.exists():
-        return {
-            "success": False,
-            "overall_status": "failure",
-            "error": "gradlew not found in project root",
-            "suggestion": "This tool requires Gradle wrapper to be present",
-        }
-
     steps = []
     total_start_time = time.time()
 
-    # Step 1: Environment Setup
+    # Step 1: Validate environment
+    env_result = _validate_deployment_environment(project_path_obj, keystore_path_obj)
+    if not env_result["success"]:
+        return {
+            "success": False,
+            "overall_status": "failure",
+            "error": env_result["error"],
+            **(
+                {"suggestion": env_result["suggestion"]}
+                if "suggestion" in env_result
+                else {}
+            ),
+        }
+
+    gradlew = env_result["gradlew"]
+
+    # Environment setup succeeded
     step_start = time.time()
     steps.append(
         {
@@ -1822,198 +2064,44 @@ def test_deployment_workflow(
 
     # Step 2: Build AAB
     step_start = time.time()
-    try:
-        # Set environment variables for signing
-        env = os.environ.copy()
-        env["SIGNING_KEY_STORE_PATH"] = str(keystore_path_obj)
-        env["SIGNING_STORE_PASSWORD"] = store_password
-        env["SIGNING_KEY_ALIAS"] = key_alias
-        env["SIGNING_KEY_PASSWORD"] = key_password
+    build_result = _build_release_aab(
+        project_path_obj,
+        keystore_path_obj,
+        store_password,
+        key_alias,
+        key_password,
+        gradlew,
+        step_start,
+    )
 
-        # Run Gradle build
-        result = subprocess.run(
-            [str(gradlew), "bundleRelease"],
-            cwd=str(project_path_obj),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10 minutes
-        )
+    steps.append(build_result["step_info"])
 
-        if result.returncode != 0:
-            # Add null check for stderr/stdout (Issue #12)
-            error_output = "No output available"
-            if result.stderr:
-                error_output = result.stderr[-500:]
-            elif result.stdout:
-                error_output = result.stdout[-500:]
-
-            full_output = "No output available"
-            if result.stderr:
-                full_output = result.stderr[-1000:]
-            elif result.stdout:
-                full_output = result.stdout[-1000:]
-
-            steps.append(
-                {
-                    "step": "Build AAB",
-                    "status": "fail",
-                    "duration_seconds": round(time.time() - step_start, 1),
-                    "message": "Failed to build release AAB",
-                    "details": error_output,
-                }
-            )
-
-            return {
-                "success": False,
-                "overall_status": "failure",
-                "steps": steps,
-                "total_duration_seconds": round(time.time() - total_start_time, 1),
-                "build_successful": False,
-                "error": "Gradle build failed",
-                "gradle_output": full_output,
-            }
-
-        # Find the AAB file
-        aab_path = (
-            project_path_obj
-            / "app"
-            / "build"
-            / "outputs"
-            / "bundle"
-            / "release"
-            / "app-release.aab"
-        )
-        if not aab_path.exists():
-            steps.append(
-                {
-                    "step": "Build AAB",
-                    "status": "fail",
-                    "duration_seconds": round(time.time() - step_start, 1),
-                    "message": "AAB file was not generated",
-                }
-            )
-
-            return {
-                "success": False,
-                "overall_status": "failure",
-                "steps": steps,
-                "total_duration_seconds": round(time.time() - total_start_time, 1),
-                "build_successful": False,
-                "aab_generated": False,
-                "error": "AAB file not found after build",
-            }
-
-        aab_size_mb = round(aab_path.stat().st_size / (1024 * 1024), 2)
-
-        steps.append(
-            {
-                "step": "Build AAB",
-                "status": "pass",
-                "duration_seconds": round(time.time() - step_start, 1),
-                "message": "Successfully built release AAB",
-                "details": {
-                    "task": "bundleRelease",
-                    "output_file": str(aab_path.relative_to(project_path_obj)),
-                    "file_size_mb": aab_size_mb,
-                },
-            }
-        )
-
-    except subprocess.TimeoutExpired:
-        steps.append(
-            {
-                "step": "Build AAB",
-                "status": "fail",
-                "duration_seconds": 600,
-                "message": "Build timed out after 10 minutes",
-            }
-        )
-
+    if not build_result["success"]:
         return {
             "success": False,
             "overall_status": "failure",
             "steps": steps,
             "total_duration_seconds": round(time.time() - total_start_time, 1),
             "build_successful": False,
-            "error": "Build timed out",
+            "error": build_result["error"],
+            **(
+                {
+                    k: v
+                    for k, v in build_result.items()
+                    if k in ["gradle_output", "aab_generated"]
+                }
+            ),
         }
 
-    except Exception as e:
-        steps.append(
-            {
-                "step": "Build AAB",
-                "status": "fail",
-                "duration_seconds": round(time.time() - step_start, 1),
-                "message": f"Unexpected error during build: {str(e)}",
-            }
-        )
-
-        return {
-            "success": False,
-            "overall_status": "failure",
-            "steps": steps,
-            "total_duration_seconds": round(time.time() - total_start_time, 1),
-            "build_successful": False,
-            "error": str(e),
-        }
+    aab_path = build_result["aab_path"]
+    aab_size_mb = build_result["aab_size_mb"]
 
     # Step 3: Verify Signing
     step_start = time.time()
-    try:
-        # Use jarsigner to verify signing
-        verify_result = subprocess.run(
-            ["jarsigner", "-verify", "-verbose", str(aab_path)],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+    verify_result = _verify_aab_signature(aab_path, step_start)
 
-        # Add null check for stdout (Issue #12)
-        verify_output = verify_result.stdout or ""
-        if "jar verified" in verify_output.lower():
-            steps.append(
-                {
-                    "step": "Verify Signing",
-                    "status": "pass",
-                    "duration_seconds": round(time.time() - step_start, 1),
-                    "message": "AAB is properly signed",
-                }
-            )
-            signing_successful = True
-        else:
-            steps.append(
-                {
-                    "step": "Verify Signing",
-                    "status": "fail",
-                    "duration_seconds": round(time.time() - step_start, 1),
-                    "message": "AAB signing verification failed",
-                    "details": verify_output[:500],  # Use verified output (Issue #12)
-                }
-            )
-            signing_successful = False
-
-    except FileNotFoundError:
-        steps.append(
-            {
-                "step": "Verify Signing",
-                "status": "skipped",
-                "duration_seconds": round(time.time() - step_start, 1),
-                "message": "jarsigner not found - skipping signature verification",
-            }
-        )
-        signing_successful = None  # Unknown
-
-    except Exception as e:
-        steps.append(
-            {
-                "step": "Verify Signing",
-                "status": "fail",
-                "duration_seconds": round(time.time() - step_start, 1),
-                "message": f"Error verifying signature: {str(e)}",
-            }
-        )
-        signing_successful = False
+    steps.append(verify_result["step_info"])
+    signing_successful = verify_result["signing_successful"]
 
     # Step 4: Upload to Play Store (dry run)
     if dry_run:
@@ -2025,6 +2113,7 @@ def test_deployment_workflow(
             }
         )
 
+    # Generate report
     errors = []
     warnings = []
     ready_for_deployment = signing_successful is not False
