@@ -9,7 +9,7 @@ Security Notes:
     - Review SECURITY.md for comprehensive guidelines
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 # Import security utilities
 from .security_utils import (
@@ -28,6 +28,38 @@ from .security_utils import (
 # Update this constant as Google's requirements change
 # See: https://developer.android.com/google/play/requirements/target-sdk
 MINIMUM_TARGET_SDK = 33
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+
+def _get_process_output(result, max_length: int = 500) -> str:
+    """
+    Extract output from subprocess result with null safety.
+
+    Helper function to avoid duplicate error output extraction pattern (Issue #38).
+    Checks stderr first, then stdout, with a default message if neither is available.
+
+    Args:
+        result: subprocess.CompletedProcess result object
+        max_length: Maximum number of characters to extract from end of output
+
+    Returns:
+        Extracted output string, truncated to max_length
+    """
+    if result.stderr:
+        return result.stderr[-max_length:]
+    elif result.stdout:
+        return result.stdout[-max_length:]
+    else:
+        return "No output available"
+
+
+# ============================================================================
+# MCP Tool Functions
+# ============================================================================
 
 
 def analyze_android_project(project_path: str) -> Dict[str, Any]:
@@ -526,11 +558,15 @@ def generate_keystore(
             try:
                 store_pass_file.unlink()
             except Exception:
+                # Ignore cleanup errors - don't want to mask the real error
+                # File may be locked or permissions changed, but it's in temp dir
                 pass
         if key_pass_file and key_pass_file.exists():
             try:
                 key_pass_file.unlink()
             except Exception:
+                # Ignore cleanup errors - don't want to mask the real error
+                # File may be locked or permissions changed, but it's in temp dir
                 pass
 
 
@@ -605,7 +641,13 @@ def generate_signing_config(
     except ValueError as e:
         return {"success": False, "error": f"Invalid project path: {e}"}
 
-    # Generate Kotlin DSL
+    # NOTE (Issue #39): Currently only 'environment_variables' strategy is implemented.
+    # The signing_strategy parameter is validated above for future use.
+    # TODO: Implement 'gradle_properties' strategy that reads from gradle.properties file
+    # instead of environment variables. When implemented, use the signing_strategy value
+    # to determine which config template to generate.
+
+    # Generate Kotlin DSL (using environment_variables strategy)
     gradle_config_kotlin = """signingConfigs {
     create("release") {
         storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
@@ -1008,6 +1050,7 @@ jobs:
       - name: Decode Keystore
         run: |
           echo "${{{{ secrets.SIGNING_KEY_STORE_BASE64 }}}}" | base64 --decode > ${{{{ github.workspace }}}}/release.jks
+          chmod 600 ${{{{ github.workspace }}}}/release.jks
 
       - name: Build Release AAB
         run: ./gradlew bundleRelease
@@ -1084,7 +1127,9 @@ def validate_github_secrets(
     repo_owner: str,
     repo_name: str,
     github_token: str,
-    required_secrets: list = None,  # Fixed type from Any (Issue #21)
+    required_secrets: Optional[
+        List[str]
+    ] = None,  # Fixed type from Any (Issue #21, #32)
 ) -> Dict[str, Any]:
     r"""
     Validate that required GitHub Secrets are configured (checks existence only)
@@ -1202,8 +1247,9 @@ def validate_github_secrets(
                 "suggestion": "Generate a new token at https://github.com/settings/tokens with repo scope",
             }
         elif response.status_code == 403:
-            # Don't include response.text in error (Issue #15 - may contain token)
-            if "rate limit" in str(response.status_code):
+            # Check for rate limiting (Issue #36 - check response text not status_code)
+            # Don't include full response.text in error (Issue #15 - may contain token)
+            if "rate limit" in response.text.lower():
                 return {
                     "success": False,
                     "error": "GitHub API rate limit exceeded",
@@ -1375,13 +1421,22 @@ def create_github_secrets_guide(
                 "name": "SIGNING_KEY_STORE_BASE64",
                 "description": "Your Android keystore file encoded as base64",
                 "how_to_get_value": [
-                    "Open terminal/command prompt",
-                    "Navigate to the directory containing your keystore",
-                    "Run: base64 -w 0 your-keystore.jks (Linux/Mac)",
-                    "Or Windows: certutil -encode your-keystore.jks keystore-base64.txt",
-                    "  - Then remove header/footer lines (BEGIN/END CERTIFICATE) and line breaks",
-                    "  - Or use PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('your-keystore.jks'))",
-                    "Copy the output and paste as the secret value",
+                    "Navigate to the directory containing your keystore file",
+                    "",
+                    "Linux/Mac:",
+                    "  base64 -w 0 your-keystore.jks",
+                    "",
+                    "Windows (PowerShell - RECOMMENDED):",
+                    "  [Convert]::ToBase64String([IO.File]::ReadAllBytes('your-keystore.jks'))",
+                    "",
+                    "Windows (CMD - requires manual cleanup):",
+                    "  certutil -encode your-keystore.jks keystore-base64.txt",
+                    "  Then open keystore-base64.txt and:",
+                    "    1. Remove the first line (-----BEGIN CERTIFICATE-----)",
+                    "    2. Remove the last line (-----END CERTIFICATE-----)",
+                    "    3. Remove all line breaks to create one continuous string",
+                    "",
+                    "Copy the base64 output and paste as the secret value",
                 ],
                 "example_command": example_command,
                 "is_sensitive": True,
@@ -1599,7 +1654,9 @@ def validate_play_store_setup(
                 pass  # Ignore cleanup errors
 
         except HttpError as e:
-            if e.resp.status == 404:
+            # Defensive access for e.resp.status (Issue #35)
+            status_code = e.resp.status if hasattr(e, "resp") and e.resp else None
+            if status_code == 404:
                 checks["app_exists"] = {
                     "status": "fail",
                     "message": f'App with package name "{package_name}" not found in Play Console',
@@ -1608,7 +1665,7 @@ def validate_play_store_setup(
                     "App not found. Make sure the app is created in Play Console first."
                 )
                 overall_status = "failure"
-            elif e.resp.status == 403:
+            elif status_code == 403:
                 checks["permissions_sufficient"] = {
                     "status": "fail",
                     "message": "Service account lacks required permissions",
@@ -1647,7 +1704,9 @@ def validate_play_store_setup(
             raise
 
     except HttpError as e:
-        if e.resp.status == 401:
+        # Defensive access for e.resp.status (Issue #35)
+        status_code = e.resp.status if hasattr(e, "resp") and e.resp else None
+        if status_code == 401:
             checks["service_account_valid"] = {
                 "status": "fail",
                 "message": "Service account credentials are invalid",
@@ -1656,7 +1715,7 @@ def validate_play_store_setup(
                 "Service account credentials rejected. Verify the JSON file is correct."
             )
             overall_status = "failure"
-        elif e.resp.status == 403:
+        elif status_code == 403:
             checks["api_enabled"] = {
                 "status": "fail",
                 "message": "Google Play Developer API is not enabled or accessible",
@@ -1667,7 +1726,8 @@ def validate_play_store_setup(
             overall_status = "failure"
         else:
             # Use str(e) instead of private _get_reason() method (Issue #23)
-            errors.append(f"Google Play API error: {e.resp.status} - {str(e)}")
+            status_msg = f": {status_code}" if status_code else ""
+            errors.append(f"Google Play API error{status_msg} - {str(e)}")
             overall_status = "failure"
 
     except Exception as e:
@@ -1785,18 +1845,9 @@ def _build_release_aab(
         )
 
         if result.returncode != 0:
-            # Add null check for stderr/stdout (Issue #12)
-            error_output = "No output available"
-            if result.stderr:
-                error_output = result.stderr[-500:]
-            elif result.stdout:
-                error_output = result.stdout[-500:]
-
-            full_output = "No output available"
-            if result.stderr:
-                full_output = result.stderr[-1000:]
-            elif result.stdout:
-                full_output = result.stdout[-1000:]
+            # Use helper to extract output safely (Issue #38, #12)
+            error_output = _get_process_output(result, max_length=500)
+            full_output = _get_process_output(result, max_length=1000)
 
             step_info = {
                 "step": "Build AAB",
