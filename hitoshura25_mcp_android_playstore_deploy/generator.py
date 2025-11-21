@@ -23,6 +23,12 @@ from .security_utils import (
     validate_android_package_name,
 )
 
+# Google Play Store requirements (Issue #25)
+# As of August 2023, Google Play requires targetSdk 33+ for new apps and updates
+# Update this constant as Google's requirements change
+# See: https://developer.android.com/google/play/requirements/target-sdk
+MINIMUM_TARGET_SDK = 33
+
 
 def analyze_android_project(project_path: str) -> Dict[str, Any]:
     r"""
@@ -245,15 +251,15 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
             }
         )
 
-    if target_sdk and target_sdk < 33:
+    if target_sdk and target_sdk < MINIMUM_TARGET_SDK:
         recommendations.append(
-            f"Update targetSdk to 33 or higher (currently {target_sdk})"
+            f"Update targetSdk to {MINIMUM_TARGET_SDK} or higher (currently {target_sdk})"
         )
         issues.append(
             {
                 "severity": "high",
-                "message": f"targetSdk {target_sdk} is below Google Play requirements",
-                "fix": "Update targetSdk to at least 33 in build.gradle",
+                "message": f"targetSdk {target_sdk} is below Google Play requirements (minimum {MINIMUM_TARGET_SDK})",
+                "fix": f"Update targetSdk to at least {MINIMUM_TARGET_SDK} in build.gradle",
             }
         )
 
@@ -983,6 +989,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Security Note (Issue #13): For production use, consider pinning actions to specific
+      # commit SHAs instead of tags to prevent supply chain attacks. Example:
+      #   uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -1008,6 +1017,8 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{{{ secrets.SIGNING_STORE_PASSWORD }}}}
           SIGNING_KEY_STORE_PATH: ${{{{ github.workspace }}}}/release.jks
 
+      # Note (Issue #16): This uses r0adkll/upload-google-play, a community-maintained action.
+      # For production, consider official alternatives or pin to a specific commit SHA.
       - name: Upload to Google Play {track} Track
         uses: r0adkll/upload-google-play@v1
         with:
@@ -1367,7 +1378,9 @@ def create_github_secrets_guide(
                     "Open terminal/command prompt",
                     "Navigate to the directory containing your keystore",
                     "Run: base64 -w 0 your-keystore.jks (Linux/Mac)",
-                    "Or: certutil -encode your-keystore.jks keystore-base64.txt (Windows)",
+                    "Or Windows: certutil -encode your-keystore.jks keystore-base64.txt",
+                    "  - Then remove header/footer lines (BEGIN/END CERTIFICATE) and line breaks",
+                    "  - Or use PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('your-keystore.jks'))",
                     "Copy the output and paste as the secret value",
                 ],
                 "example_command": example_command,
@@ -1653,7 +1666,8 @@ def validate_play_store_setup(
             )
             overall_status = "failure"
         else:
-            errors.append(f"Google Play API error: {e.resp.status} - {e._get_reason()}")
+            # Use str(e) instead of private _get_reason() method (Issue #23)
+            errors.append(f"Google Play API error: {e.resp.status} - {str(e)}")
             overall_status = "failure"
 
     except Exception as e:
@@ -1707,7 +1721,10 @@ def test_deployment_workflow(
 
         key_password: Key password
 
-        dry_run: If true, skip actual Play Store upload
+        dry_run: If true, skip actual Play Store upload.
+                 **IMPORTANT**: Defaults to True for safety. If not specified,
+                 the function will NOT perform actual deployment. Set explicitly
+                 to False to enable real deployment.
 
 
     Returns:
@@ -1824,15 +1841,26 @@ def test_deployment_workflow(
         )
 
         if result.returncode != 0:
+            # Add null check for stderr/stdout (Issue #12)
+            error_output = "No output available"
+            if result.stderr:
+                error_output = result.stderr[-500:]
+            elif result.stdout:
+                error_output = result.stdout[-500:]
+
+            full_output = "No output available"
+            if result.stderr:
+                full_output = result.stderr[-1000:]
+            elif result.stdout:
+                full_output = result.stdout[-1000:]
+
             steps.append(
                 {
                     "step": "Build AAB",
                     "status": "fail",
                     "duration_seconds": round(time.time() - step_start, 1),
                     "message": "Failed to build release AAB",
-                    "details": result.stderr[-500:]
-                    if result.stderr
-                    else result.stdout[-500:],  # Last 500 chars
+                    "details": error_output,
                 }
             )
 
@@ -1843,9 +1871,7 @@ def test_deployment_workflow(
                 "total_duration_seconds": round(time.time() - total_start_time, 1),
                 "build_successful": False,
                 "error": "Gradle build failed",
-                "gradle_output": result.stderr[-1000:]
-                if result.stderr
-                else result.stdout[-1000:],
+                "gradle_output": full_output,
             }
 
         # Find the AAB file
@@ -1943,7 +1969,9 @@ def test_deployment_workflow(
             timeout=30,
         )
 
-        if "jar verified" in verify_result.stdout.lower():
+        # Add null check for stdout (Issue #12)
+        verify_output = verify_result.stdout or ""
+        if "jar verified" in verify_output.lower():
             steps.append(
                 {
                     "step": "Verify Signing",
@@ -1960,7 +1988,7 @@ def test_deployment_workflow(
                     "status": "fail",
                     "duration_seconds": round(time.time() - step_start, 1),
                     "message": "AAB signing verification failed",
-                    "details": verify_result.stdout[:500],
+                    "details": verify_output[:500],  # Use verified output (Issue #12)
                 }
             )
             signing_successful = False
