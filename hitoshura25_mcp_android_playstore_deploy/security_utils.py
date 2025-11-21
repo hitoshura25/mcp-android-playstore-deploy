@@ -19,9 +19,7 @@ from collections import defaultdict
 from threading import Lock
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -109,9 +107,7 @@ def validate_numeric_input(
 # ============================================================================
 
 
-def validate_safe_path(
-    requested_path: str, allowed_directory: Path, must_exist: bool = False
-) -> Path:
+def validate_safe_path(requested_path: str, allowed_directory: Path, must_exist: bool = False) -> Path:
     """
     Validate that a file path is within allowed directory.
 
@@ -219,18 +215,12 @@ def validate_safe_command(
         for arg in args:
             # Negative validation: check for dangerous characters
             if any(char in arg for char in dangerous_chars):
-                logger.warning(
-                    f"Blocked command injection attempt (dangerous char): {arg}"
-                )
-                raise ValueError(
-                    f"Invalid argument contains shell metacharacters: {arg}"
-                )
+                logger.warning(f"Blocked command injection attempt (dangerous char): {arg}")
+                raise ValueError(f"Invalid argument contains shell metacharacters: {arg}")
 
             # Positive validation: ensure only allowed characters
             if not re.match(allowed_arg_pattern, arg):
-                logger.warning(
-                    f"Blocked command injection attempt (invalid chars): {arg}"
-                )
+                logger.warning(f"Blocked command injection attempt (invalid chars): {arg}")
                 raise ValueError(f"Argument contains disallowed characters: {arg}")
 
         cmd.extend(args)
@@ -250,9 +240,7 @@ class RateLimiter:
         self.requests = defaultdict(list)
         self.lock = Lock()
 
-    def is_allowed(
-        self, key: str, max_requests: int = 100, window_seconds: int = 60
-    ) -> bool:
+    def is_allowed(self, key: str, max_requests: int = 100, window_seconds: int = 60) -> bool:
         """
         Check if request is within rate limits.
 
@@ -268,17 +256,12 @@ class RateLimiter:
             now = time.time()
 
             # Remove requests outside the current window
-            self.requests[key] = [
-                req_time
-                for req_time in self.requests[key]
-                if now - req_time < window_seconds
-            ]
+            self.requests[key] = [req_time for req_time in self.requests[key] if now - req_time < window_seconds]
 
             # Check if limit exceeded
             if len(self.requests[key]) >= max_requests:
                 logger.warning(
-                    f"Rate limit exceeded for {key}: "
-                    f"{len(self.requests[key])} requests in {window_seconds}s"
+                    f"Rate limit exceeded for {key}: {len(self.requests[key])} requests in {window_seconds}s"
                 )
                 return False
 
@@ -312,10 +295,7 @@ def with_rate_limit(max_requests: int = 100, window_seconds: int = 60):
             key = func.__name__
 
             if not _rate_limiter.is_allowed(key, max_requests, window_seconds):
-                raise ValueError(
-                    f"Rate limit exceeded. Maximum {max_requests} requests "
-                    f"per {window_seconds} seconds."
-                )
+                raise ValueError(f"Rate limit exceeded. Maximum {max_requests} requests per {window_seconds} seconds.")
 
             return func(*args, **kwargs)
 
@@ -362,16 +342,13 @@ def audit_log(func):
     def wrapper(*args, **kwargs):
         # Redact sensitive parameter values
         safe_kwargs = {
-            k: "[REDACTED]" if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100]
-            for k, v in kwargs.items()
+            k: "[REDACTED]" if k.lower() in SENSITIVE_PARAM_NAMES else str(v)[:100] for k, v in kwargs.items()
         }
 
         # Truncate args to avoid logging large data
         safe_args = str(args)[:100]
 
-        logger.info(
-            f"Tool called: {func.__name__} args={safe_args} kwargs={safe_kwargs}"
-        )
+        logger.info(f"Tool called: {func.__name__} args={safe_args} kwargs={safe_kwargs}")
 
         try:
             result = func(*args, **kwargs)
@@ -579,9 +556,7 @@ def validate_track(track: str) -> str:
     valid_tracks = {"internal", "alpha", "beta", "production"}
 
     if track not in valid_tracks:
-        raise ValueError(
-            f"Invalid track '{track}'. Must be one of: {', '.join(sorted(valid_tracks))}"
-        )
+        raise ValueError(f"Invalid track '{track}'. Must be one of: {', '.join(sorted(valid_tracks))}")
 
     return track
 
@@ -603,8 +578,7 @@ def validate_signing_strategy(strategy: str) -> str:
 
     if strategy not in valid_strategies:
         raise ValueError(
-            f"Invalid signing strategy '{strategy}'. "
-            f"Must be one of: {', '.join(sorted(valid_strategies))}"
+            f"Invalid signing strategy '{strategy}'. Must be one of: {', '.join(sorted(valid_strategies))}"
         )
 
     return strategy

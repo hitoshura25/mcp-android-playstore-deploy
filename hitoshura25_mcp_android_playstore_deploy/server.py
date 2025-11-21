@@ -85,9 +85,7 @@ async def generate_keystore(
 
 
 @mcp.tool()
-async def generate_signing_config(
-    project_path: str, signing_strategy: str = None
-) -> str:
+async def generate_signing_config(project_path: str, signing_strategy: str = None) -> str:
     """Generate Gradle signing configuration code to add to build.gradle.kts
 
 
@@ -102,9 +100,7 @@ async def generate_signing_config(
     Returns:
         Result from generate_signing_config
     """
-    result = generator.generate_signing_config(
-        project_path=project_path, signing_strategy=signing_strategy
-    )
+    result = generator.generate_signing_config(project_path=project_path, signing_strategy=signing_strategy)
     # Handle both sync and async business logic
     if inspect.isawaitable(result):
         result = await result
@@ -225,9 +221,7 @@ async def create_github_secrets_guide(repo_url: str, keystore_path: str = None) 
     Returns:
         Result from create_github_secrets_guide
     """
-    result = generator.create_github_secrets_guide(
-        repo_url=repo_url, keystore_path=keystore_path
-    )
+    result = generator.create_github_secrets_guide(repo_url=repo_url, keystore_path=keystore_path)
     # Handle both sync and async business logic
     if inspect.isawaitable(result):
         result = await result
@@ -235,9 +229,7 @@ async def create_github_secrets_guide(repo_url: str, keystore_path: str = None) 
 
 
 @mcp.tool()
-async def validate_play_store_setup(
-    service_account_json_path: str, package_name: str
-) -> str:
+async def validate_play_store_setup(service_account_json_path: str, package_name: str) -> str:
     """Validate that Play Store app and API access are properly configured using service account
 
 

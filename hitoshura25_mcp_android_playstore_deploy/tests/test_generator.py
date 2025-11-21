@@ -25,9 +25,7 @@ def test_setup_service_account_guide():
 
 def test_generate_signing_config():
     """Test that generate_signing_config generates proper Gradle config"""
-    result = generate_signing_config(
-        project_path="/fake/path", signing_strategy="environment_variables"
-    )
+    result = generate_signing_config(project_path="/fake/path", signing_strategy="environment_variables")
 
     assert result["success"] is True
     assert "gradle_config_kotlin" in result
@@ -43,17 +41,12 @@ def test_create_github_secrets_guide():
     assert result["success"] is True
     assert "secrets" in result
     assert len(result["secrets"]) == 5
-    assert (
-        result["github_secrets_url"]
-        == "https://github.com/owner/repo/settings/secrets/actions"
-    )
+    assert result["github_secrets_url"] == "https://github.com/owner/repo/settings/secrets/actions"
 
 
 def test_generate_github_workflow_defaults():
     """Test that generate_github_workflow uses proper defaults"""
-    result = generate_github_workflow(
-        project_path="/fake/path", package_name="com.example.app"
-    )
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app")
 
     assert result["success"] is True
     assert "workflow_content" in result
@@ -64,9 +57,7 @@ def test_generate_github_workflow_defaults():
 
 def test_generate_github_workflow_with_track():
     """Test that generate_github_workflow respects track parameter"""
-    result = generate_github_workflow(
-        project_path="/fake/path", package_name="com.example.app", track="beta"
-    )
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app", track="beta")
 
     assert result["success"] is True
     assert "beta" in result["workflow_path"]

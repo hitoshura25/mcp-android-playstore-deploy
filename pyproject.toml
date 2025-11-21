@@ -59,3 +59,20 @@ testpaths = ["hitoshura25_mcp_android_playstore_deploy/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+# Enable additional rule sets for better code quality
+select = [
+    "F",    # pyflakes
+    "E",    # pycodestyle errors (subset)
+    "W",    # pycodestyle warnings (subset)
+    "DTZ",  # flake8-datetimez (timezone-aware datetime)
+]
+# Ignore specific rules that may be too strict for this project
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+]

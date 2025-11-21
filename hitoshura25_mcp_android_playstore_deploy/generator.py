@@ -203,9 +203,7 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
     if version_code_match:
         version_code = int(version_code_match.group(1))
 
-    version_name_match = re.search(
-        r'versionName\s*=?\s*["\']([^"\']+)["\']', build_content
-    )
+    version_name_match = re.search(r'versionName\s*=?\s*["\']([^"\']+)["\']', build_content)
     if version_name_match:
         version_name = version_name_match.group(1)
 
@@ -223,15 +221,10 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
         min_sdk = int(min_sdk_match.group(1))
 
     # Check for signing config
-    has_signing_config = (
-        "signingConfig" in build_content and "signingConfigs" in build_content
-    )
+    has_signing_config = "signingConfig" in build_content and "signingConfigs" in build_content
 
     # Check for minify enabled
-    is_minify_enabled = (
-        "isMinifyEnabled = true" in build_content
-        or "minifyEnabled true" in build_content
-    )
+    is_minify_enabled = "isMinifyEnabled = true" in build_content or "minifyEnabled true" in build_content
 
     # Detect project type
     project_type = "native_android"
@@ -284,9 +277,7 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
         )
 
     if target_sdk and target_sdk < MINIMUM_TARGET_SDK:
-        recommendations.append(
-            f"Update targetSdk to {MINIMUM_TARGET_SDK} or higher (currently {target_sdk})"
-        )
+        recommendations.append(f"Update targetSdk to {MINIMUM_TARGET_SDK} or higher (currently {target_sdk})")
         issues.append(
             {
                 "severity": "high",
@@ -410,9 +401,7 @@ def generate_keystore(
         store_password = validate_string_input(
             store_password, max_length=100, min_length=6, field_name="store_password"
         )
-        key_password = validate_string_input(
-            key_password, max_length=100, min_length=6, field_name="key_password"
-        )
+        key_password = validate_string_input(key_password, max_length=100, min_length=6, field_name="key_password")
         # DN can contain spaces, commas, equals, but validate it
         dname = validate_string_input(
             dname,
@@ -420,12 +409,8 @@ def generate_keystore(
             allowed_pattern=r"^[a-zA-Z0-9\s,=.@-]+$",
             field_name="dname",
         )
-        validity_days = validate_numeric_input(
-            validity_days, min_value=1, max_value=36500, field_name="validity_days"
-        )
-        key_size = validate_numeric_input(
-            key_size, min_value=2048, max_value=4096, field_name="key_size"
-        )
+        validity_days = validate_numeric_input(validity_days, min_value=1, max_value=36500, field_name="validity_days")
+        key_size = validate_numeric_input(key_size, min_value=2048, max_value=4096, field_name="key_size")
     except ValueError as e:
         return {"success": False, "error": f"Invalid input: {e}"}
 
@@ -457,9 +442,7 @@ def generate_keystore(
     key_pass_file = None
 
     try:
-        store_pass_file = create_secure_temp_file(
-            store_password, prefix="keystore_pass_"
-        )
+        store_pass_file = create_secure_temp_file(store_password, prefix="keystore_pass_")
         key_pass_file = create_secure_temp_file(key_password, prefix="key_pass_")
 
         # Generate keystore using keytool with password files
@@ -490,14 +473,9 @@ def generate_keystore(
         if result.returncode != 0:
             # Redact sensitive data from error output (Issue #20)
             error_msg = result.stderr if result.stderr else result.stdout
-            error_msg = (
-                redact_sensitive_data(error_msg) if error_msg else "Unknown error"
-            )
+            error_msg = redact_sensitive_data(error_msg) if error_msg else "Unknown error"
 
-            if (
-                "command not found" in error_msg.lower()
-                or "not recognized" in error_msg.lower()
-            ):
+            if "command not found" in error_msg.lower() or "not recognized" in error_msg.lower():
                 return {
                     "success": False,
                     "error": "keytool not found. Please install JDK and ensure it is in your PATH.",
@@ -570,9 +548,7 @@ def generate_keystore(
                 pass
 
 
-def generate_signing_config(
-    project_path: str, signing_strategy: str = None
-) -> Dict[str, Any]:
+def generate_signing_config(project_path: str, signing_strategy: str = None) -> Dict[str, Any]:
     r"""
     Generate Gradle signing configuration code to add to build.gradle.kts
 
@@ -1127,9 +1103,7 @@ def validate_github_secrets(
     repo_owner: str,
     repo_name: str,
     github_token: str,
-    required_secrets: Optional[
-        List[str]
-    ] = None,  # Fixed type from Any (Issue #21, #32)
+    required_secrets: Optional[List[str]] = None,  # Fixed type from Any (Issue #21, #32)
 ) -> Dict[str, Any]:
     r"""
     Validate that required GitHub Secrets are configured (checks existence only)
@@ -1188,7 +1162,7 @@ def validate_github_secrets(
                 return {'success': True, 'data': data}
     """
     import requests
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     # Validate required_secrets type (Issue #21)
     if required_secrets is not None and not isinstance(required_secrets, list):
@@ -1221,9 +1195,7 @@ def validate_github_secrets(
             allowed_pattern=r"^[a-zA-Z0-9_.-]+$",
             field_name="repo_name",
         )
-        github_token = validate_string_input(
-            github_token, max_length=200, min_length=10, field_name="github_token"
-        )
+        github_token = validate_string_input(github_token, max_length=200, min_length=10, field_name="github_token")
     except ValueError as e:
         return {"success": False, "error": f"Invalid input: {e}"}
 
@@ -1295,9 +1267,7 @@ def validate_github_secrets(
         }
 
         for secret in missing_secrets:
-            instructions_for_missing[secret] = secret_instructions.get(
-                secret, "Configure this secret"
-            )
+            instructions_for_missing[secret] = secret_instructions.get(secret, "Configure this secret")
 
         return {
             "success": True,
@@ -1305,12 +1275,10 @@ def validate_github_secrets(
             "total_required": len(required_secrets),
             "total_configured": len(required_secrets) - len(missing_secrets),
             "missing_secrets": missing_secrets,
-            "configured_secrets": [
-                s for s in required_secrets if s in configured_secrets
-            ],
+            "configured_secrets": [s for s in required_secrets if s in configured_secrets],
             "instructions_for_missing": instructions_for_missing,
             "github_secrets_url": f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions",
-            "validation_timestamp": datetime.utcnow().isoformat() + "Z",
+            "validation_timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     except requests.exceptions.Timeout:
@@ -1329,9 +1297,7 @@ def validate_github_secrets(
         return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 
-def create_github_secrets_guide(
-    repo_url: str, keystore_path: str = None
-) -> Dict[str, Any]:
+def create_github_secrets_guide(repo_url: str, keystore_path: str = None) -> Dict[str, Any]:
     r"""
     Generate a comprehensive guide for creating all required GitHub Secrets
 
@@ -1387,20 +1353,14 @@ def create_github_secrets_guide(
     # Parse repo URL to extract owner and name
     import re
 
-    github_match = re.match(
-        r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url
-    )
+    github_match = re.match(r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$", repo_url)
     if github_match:
         repo_owner, repo_name = github_match.groups()
-        github_secrets_url = (
-            f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions"
-        )
+        github_secrets_url = f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions"
     else:
         github_secrets_url = repo_url + "/settings/secrets/actions"
 
-    example_command = (
-        "base64 -w 0 release.jks" if keystore_path else "base64 -w 0 your-keystore.jks"
-    )
+    example_command = "base64 -w 0 release.jks" if keystore_path else "base64 -w 0 your-keystore.jks"
 
     return {
         "success": True,
@@ -1455,18 +1415,14 @@ def create_github_secrets_guide(
             {
                 "name": "SIGNING_KEY_PASSWORD",
                 "description": "The password for your signing key",
-                "how_to_get_value": [
-                    "This is the password you set when creating the keystore key"
-                ],
+                "how_to_get_value": ["This is the password you set when creating the keystore key"],
                 "is_sensitive": True,
                 "required": True,
             },
             {
                 "name": "SIGNING_STORE_PASSWORD",
                 "description": "The password for your keystore file",
-                "how_to_get_value": [
-                    "This is the password you set when creating the keystore"
-                ],
+                "how_to_get_value": ["This is the password you set when creating the keystore"],
                 "is_sensitive": True,
                 "required": True,
             },
@@ -1493,9 +1449,7 @@ def create_github_secrets_guide(
     }
 
 
-def validate_play_store_setup(
-    service_account_json_path: str, package_name: str
-) -> Dict[str, Any]:
+def validate_play_store_setup(service_account_json_path: str, package_name: str) -> Dict[str, Any]:
     r"""
     Validate that Play Store app and API access are properly configured using service account
 
@@ -1561,9 +1515,7 @@ def validate_play_store_setup(
 
     # Validate inputs (Issue #6)
     try:
-        service_account_path = validate_project_path(
-            service_account_json_path, must_exist=True
-        )
+        service_account_path = validate_project_path(service_account_json_path, must_exist=True)
         package_name = validate_android_package_name(package_name)
     except (ValueError, FileNotFoundError) as e:
         return {
@@ -1611,16 +1563,9 @@ def validate_play_store_setup(
 
             # Get tracks information
             try:
-                tracks_response = (
-                    service.edits()
-                    .tracks()
-                    .list(packageName=package_name, editId=edit_id)
-                    .execute()
-                )
+                tracks_response = service.edits().tracks().list(packageName=package_name, editId=edit_id).execute()
 
-                available_tracks = [
-                    track["track"] for track in tracks_response.get("tracks", [])
-                ]
+                available_tracks = [track["track"] for track in tracks_response.get("tracks", [])]
 
                 checks["can_access_tracks"] = {
                     "status": "pass",
@@ -1631,9 +1576,7 @@ def validate_play_store_setup(
                 }
 
                 if not available_tracks:
-                    warnings.append(
-                        "No releases found on any track - this is expected for new apps"
-                    )
+                    warnings.append("No releases found on any track - this is expected for new apps")
 
             except HttpError as e:
                 checks["can_access_tracks"] = {
@@ -1641,15 +1584,11 @@ def validate_play_store_setup(
                     "message": "Limited track access",
                     "details": str(e),
                 }
-                warnings.append(
-                    "Could not list all tracks - may have limited permissions"
-                )
+                warnings.append("Could not list all tracks - may have limited permissions")
 
             # Clean up the edit
             try:
-                service.edits().delete(
-                    packageName=package_name, editId=edit_id
-                ).execute()
+                service.edits().delete(packageName=package_name, editId=edit_id).execute()
             except Exception:
                 pass  # Ignore cleanup errors
 
@@ -1661,18 +1600,14 @@ def validate_play_store_setup(
                     "status": "fail",
                     "message": f'App with package name "{package_name}" not found in Play Console',
                 }
-                errors.append(
-                    "App not found. Make sure the app is created in Play Console first."
-                )
+                errors.append("App not found. Make sure the app is created in Play Console first.")
                 overall_status = "failure"
             elif status_code == 403:
                 checks["permissions_sufficient"] = {
                     "status": "fail",
                     "message": "Service account lacks required permissions",
                 }
-                errors.append(
-                    'Service account needs "Release Manager" role in Play Console'
-                )
+                errors.append('Service account needs "Release Manager" role in Play Console')
                 overall_status = "failure"
             else:
                 raise
@@ -1696,9 +1631,7 @@ def validate_play_store_setup(
                 "status": "fail",
                 "message": "Invalid service account JSON format",
             }
-            errors.append(
-                "Service account JSON is malformed. Re-download from Google Cloud Console."
-            )
+            errors.append("Service account JSON is malformed. Re-download from Google Cloud Console.")
             overall_status = "failure"
         else:
             raise
@@ -1711,9 +1644,7 @@ def validate_play_store_setup(
                 "status": "fail",
                 "message": "Service account credentials are invalid",
             }
-            errors.append(
-                "Service account credentials rejected. Verify the JSON file is correct."
-            )
+            errors.append("Service account credentials rejected. Verify the JSON file is correct.")
             overall_status = "failure"
         elif status_code == 403:
             checks["api_enabled"] = {
@@ -1762,9 +1693,7 @@ def validate_play_store_setup(
 # ============================================================================
 
 
-def _validate_deployment_environment(
-    project_path_obj, keystore_path_obj
-) -> Dict[str, Any]:
+def _validate_deployment_environment(project_path_obj, keystore_path_obj) -> Dict[str, Any]:
     """
     Validate that the deployment environment is ready.
 
@@ -1865,15 +1794,7 @@ def _build_release_aab(
             }
 
         # Find the AAB file
-        aab_path = (
-            project_path_obj
-            / "app"
-            / "build"
-            / "outputs"
-            / "bundle"
-            / "release"
-            / "app-release.aab"
-        )
+        aab_path = project_path_obj / "app" / "build" / "outputs" / "bundle" / "release" / "app-release.aab"
 
         if not aab_path.exists():
             step_info = {
@@ -2093,11 +2014,7 @@ def test_deployment_workflow(
             "success": False,
             "overall_status": "failure",
             "error": env_result["error"],
-            **(
-                {"suggestion": env_result["suggestion"]}
-                if "suggestion" in env_result
-                else {}
-            ),
+            **({"suggestion": env_result["suggestion"]} if "suggestion" in env_result else {}),
         }
 
     gradlew = env_result["gradlew"]
@@ -2135,13 +2052,7 @@ def test_deployment_workflow(
             "total_duration_seconds": round(time.time() - total_start_time, 1),
             "build_successful": False,
             "error": build_result["error"],
-            **(
-                {
-                    k: v
-                    for k, v in build_result.items()
-                    if k in ["gradle_output", "aab_generated"]
-                }
-            ),
+            **({k: v for k, v in build_result.items() if k in ["gradle_output", "aab_generated"]}),
         }
 
     aab_path = build_result["aab_path"]

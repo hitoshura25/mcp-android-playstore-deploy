@@ -61,29 +61,19 @@ def main():
         help="Absolute path where the keystore will be saved",
     )
 
-    generate_keystore_parser.add_argument(
-        "--alias", type=str, required=True, help="Key alias for the signing key"
-    )
+    generate_keystore_parser.add_argument("--alias", type=str, required=True, help="Key alias for the signing key")
 
     generate_keystore_parser.add_argument(
         "--key_password", type=str, required=True, help="Password for the signing key"
     )
 
-    generate_keystore_parser.add_argument(
-        "--store_password", type=str, required=True, help="Password for the keystore"
-    )
+    generate_keystore_parser.add_argument("--store_password", type=str, required=True, help="Password for the keystore")
 
-    generate_keystore_parser.add_argument(
-        "--validity_days", type=int, help="How many days the key should be valid"
-    )
+    generate_keystore_parser.add_argument("--validity_days", type=int, help="How many days the key should be valid")
 
-    generate_keystore_parser.add_argument(
-        "--key_size", type=int, help="Key size in bits"
-    )
+    generate_keystore_parser.add_argument("--key_size", type=int, help="Key size in bits")
 
-    generate_keystore_parser.add_argument(
-        "--dname", type=str, help="Distinguished name for the certificate"
-    )
+    generate_keystore_parser.add_argument("--dname", type=str, help="Distinguished name for the certificate")
 
     # generate_signing_config command
     generate_signing_config_parser = subparsers.add_parser(
@@ -145,9 +135,7 @@ def main():
         help="Path to app module relative to project root",
     )
 
-    generate_github_workflow_parser.add_argument(
-        "--java_version", type=str, help="Java/JDK version to use for builds"
-    )
+    generate_github_workflow_parser.add_argument("--java_version", type=str, help="Java/JDK version to use for builds")
 
     # validate_github_secrets command
     validate_github_secrets_parser = subparsers.add_parser(
@@ -162,9 +150,7 @@ def main():
         help="GitHub repository owner username or organization",
     )
 
-    validate_github_secrets_parser.add_argument(
-        "--repo_name", type=str, required=True, help="GitHub repository name"
-    )
+    validate_github_secrets_parser.add_argument("--repo_name", type=str, required=True, help="GitHub repository name")
 
     validate_github_secrets_parser.add_argument(
         "--github_token",
@@ -183,9 +169,7 @@ def main():
         help="Generate a comprehensive guide for creating all required GitHub Secrets",
     )
 
-    create_github_secrets_guide_parser.add_argument(
-        "--repo_url", type=str, required=True, help="GitHub repository URL"
-    )
+    create_github_secrets_guide_parser.add_argument("--repo_url", type=str, required=True, help="GitHub repository URL")
 
     create_github_secrets_guide_parser.add_argument(
         "--keystore_path",
@@ -227,17 +211,11 @@ def main():
         "--keystore_path", type=str, required=True, help="Path to keystore file"
     )
 
-    test_deployment_workflow_parser.add_argument(
-        "--store_password", type=str, required=True, help="Keystore password"
-    )
+    test_deployment_workflow_parser.add_argument("--store_password", type=str, required=True, help="Keystore password")
 
-    test_deployment_workflow_parser.add_argument(
-        "--key_alias", type=str, required=True, help="Key alias"
-    )
+    test_deployment_workflow_parser.add_argument("--key_alias", type=str, required=True, help="Key alias")
 
-    test_deployment_workflow_parser.add_argument(
-        "--key_password", type=str, required=True, help="Key password"
-    )
+    test_deployment_workflow_parser.add_argument("--key_password", type=str, required=True, help="Key password")
 
     test_deployment_workflow_parser.add_argument(
         "--dry_run", action="store_true", help="If true, skip actual Play Store upload"
@@ -269,9 +247,7 @@ def main():
             print(result)
 
         if args.command == "generate_signing_config":
-            result = generate_signing_config(
-                project_path=args.project_path, signing_strategy=args.signing_strategy
-            )
+            result = generate_signing_config(project_path=args.project_path, signing_strategy=args.signing_strategy)
 
             print(result)
 
@@ -304,9 +280,7 @@ def main():
             print(result)
 
         if args.command == "create_github_secrets_guide":
-            result = create_github_secrets_guide(
-                repo_url=args.repo_url, keystore_path=args.keystore_path
-            )
+            result = create_github_secrets_guide(repo_url=args.repo_url, keystore_path=args.keystore_path)
 
             print(result)
 
