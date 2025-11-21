@@ -192,76 +192,115 @@ def generate_keystore(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement generate_keystore logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate output_path
-    # output_path = validate_string_input(
-    #     output_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='output_path'
-    # )
-    # # Validate alias
-    # alias = validate_string_input(
-    #     alias,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='alias'
-    # )
-    # # Validate key_password
-    # key_password = validate_string_input(
-    #     key_password,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='key_password'
-    # )
-    # # Validate store_password
-    # store_password = validate_string_input(
-    #     store_password,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='store_password'
-    # )
-    # # Validate dname
-    # dname = validate_string_input(
-    #     dname,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='dname'
-    # )
-    # 
+    import subprocess
+    import base64
+    import os
+    from pathlib import Path
 
-    return {
-        'success': True,
-        'message': 'TODO: Implement generate_keystore',
-        
-        'output_path': output_path,
-        
-        'alias': alias,
-        
-        'key_password': key_password,
-        
-        'store_password': store_password,
-        
-        'validity_days': validity_days,
-        
-        'key_size': key_size,
-        
-        'dname': dname,
-        
-    }
+    # Set defaults
+    if validity_days is None:
+        validity_days = 10000
+    if key_size is None:
+        key_size = 2048
+    if dname is None:
+        dname = "CN=Android Developer"
+
+    # Validate output path
+    output_path_obj = Path(output_path).resolve()
+    output_dir = output_path_obj.parent
+
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Check if keystore already exists
+    if output_path_obj.exists():
+        return {
+            'success': False,
+            'error': f'Keystore already exists at {output_path}',
+            'suggestion': 'Choose a different path or delete the existing keystore'
+        }
+
+    try:
+        # Generate keystore using keytool
+        cmd = [
+            'keytool',
+            '-genkeypair',
+            '-v',
+            '-keystore', str(output_path_obj),
+            '-alias', alias,
+            '-keyalg', 'RSA',
+            '-keysize', str(key_size),
+            '-validity', str(validity_days),
+            '-storepass', store_password,
+            '-keypass', key_password,
+            '-dname', dname
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if result.returncode != 0:
+            error_msg = result.stderr if result.stderr else result.stdout
+            if "command not found" in error_msg.lower() or "not recognized" in error_msg.lower():
+                return {
+                    'success': False,
+                    'error': 'keytool not found. Please install JDK and ensure it is in your PATH.',
+                    'suggestion': 'Install JDK from https://adoptium.net/'
+                }
+            return {
+                'success': False,
+                'error': f'Failed to generate keystore: {error_msg}',
+                'command': ' '.join(cmd)
+            }
+
+        # Set restrictive permissions (owner read/write only)
+        os.chmod(output_path_obj, 0o600)
+
+        # Read and encode keystore to base64
+        with open(output_path_obj, 'rb') as f:
+            keystore_bytes = f.read()
+            base64_encoded = base64.b64encode(keystore_bytes).decode('utf-8')
+
+        return {
+            'success': True,
+            'keystore_path': str(output_path_obj),
+            'alias': alias,
+            'base64_encoded': base64_encoded,
+            'instructions': [
+                'Save the keystore file securely',
+                'Back up the keystore to multiple locations',
+                'Never commit the keystore to version control',
+                'Store passwords in a secure password manager'
+            ],
+            'github_secret_instructions': {
+                'SIGNING_KEY_STORE_BASE64': 'Use the base64_encoded value above',
+                'SIGNING_KEY_ALIAS': alias,
+                'SIGNING_KEY_PASSWORD': 'Use the key_password you provided',
+                'SIGNING_STORE_PASSWORD': 'Use the store_password you provided'
+            },
+            'warning': 'CRITICAL: Loss of this keystore will prevent you from updating your app on Google Play. Back it up securely.'
+        }
+
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'error': 'Keystore generation timed out after 60 seconds'
+        }
+    except FileNotFoundError:
+        return {
+            'success': False,
+            'error': 'keytool not found. Please install JDK and ensure it is in your PATH.',
+            'suggestion': 'Install JDK from https://adoptium.net/'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Unexpected error: {str(e)}'
+        }
 
 
 
@@ -324,44 +363,117 @@ def generate_signing_config(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement generate_signing_config logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate project_path
-    # project_path = validate_string_input(
-    #     project_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='project_path'
-    # )
-    # # Validate signing_strategy
-    # signing_strategy = validate_string_input(
-    #     signing_strategy,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='signing_strategy'
-    # )
-    # 
+    # Default strategy is environment_variables
+    if signing_strategy is None:
+        signing_strategy = "environment_variables"
+
+    # Generate Kotlin DSL
+    gradle_config_kotlin = '''signingConfigs {
+    create("release") {
+        storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
+        storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+        keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+        keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+    }
+}
+
+buildTypes {
+    release {
+        signingConfig = signingConfigs.getByName("release")
+        isMinifyEnabled = true
+        isShrinkResources = true
+        proguardFiles(
+            getDefaultProguardFile("proguard-android-optimize.txt"),
+            "proguard-rules.pro"
+        )
+    }
+}'''
+
+    # Generate Groovy DSL
+    gradle_config_groovy = '''signingConfigs {
+    release {
+        storeFile file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
+        storePassword System.getenv("SIGNING_STORE_PASSWORD")
+        keyAlias System.getenv("SIGNING_KEY_ALIAS")
+        keyPassword System.getenv("SIGNING_KEY_PASSWORD")
+    }
+}
+
+buildTypes {
+    release {
+        signingConfig signingConfigs.release
+        minifyEnabled true
+        shrinkResources true
+        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+    }
+}'''
+
+    # Complete example
+    complete_example = '''plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "com.example.app"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "com.example.app"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
+            storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+            keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+            keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}'''
 
     return {
         'success': True,
-        'message': 'TODO: Implement generate_signing_config',
-        
-        'project_path': project_path,
-        
-        'signing_strategy': signing_strategy,
-        
+        'gradle_config_kotlin': gradle_config_kotlin,
+        'gradle_config_groovy': gradle_config_groovy,
+        'insert_location': 'Inside android { ... } block, before buildTypes',
+        'instructions': [
+            'Add the signingConfigs block to your app/build.gradle.kts',
+            'Update your release buildType to use the signing config',
+            'Set environment variables in your CI/CD pipeline'
+        ],
+        'required_env_vars': [
+            'SIGNING_KEY_STORE_PATH',
+            'SIGNING_STORE_PASSWORD',
+            'SIGNING_KEY_ALIAS',
+            'SIGNING_KEY_PASSWORD'
+        ],
+        'complete_example': complete_example
     }
 
 
@@ -417,26 +529,86 @@ def setup_service_account_guide(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement setup_service_account_guide logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # 
-
     return {
         'success': True,
-        'message': 'TODO: Implement setup_service_account_guide',
-        
+        'steps': [
+            {
+                'step_number': 1,
+                'title': 'Access Google Play Console',
+                'description': 'Navigate to Google Play Console and sign in with your developer account',
+                'url': 'https://play.google.com/console/',
+                'action': 'Open URL in browser',
+                'verification': 'You should see your app listed in the Play Console'
+            },
+            {
+                'step_number': 2,
+                'title': 'Navigate to API Access',
+                'description': 'In the left sidebar, go to Setup > API access',
+                'action': 'Click through navigation',
+                'verification': 'You should see the API access page with service accounts section'
+            },
+            {
+                'step_number': 3,
+                'title': 'Create Service Account',
+                'description': 'Click "Create new service account" button',
+                'action': 'Follow link to Google Cloud Platform',
+                'url': 'https://console.cloud.google.com/',
+                'details': 'This will open Google Cloud Console in a new tab'
+            },
+            {
+                'step_number': 4,
+                'title': 'Create Service Account in GCP',
+                'description': 'In Google Cloud Console, create a new service account',
+                'action': 'Fill in service account details',
+                'required_fields': {
+                    'name': 'playstore-deploy-bot',
+                    'description': 'Service account for automated Play Store deployments'
+                }
+            },
+            {
+                'step_number': 5,
+                'title': 'Create JSON Key',
+                'description': 'Create and download a JSON key for the service account',
+                'action': 'Click "Create Key" > Select JSON format > Download',
+                'warning': 'This key will only be shown once. Store it securely.',
+                'verification': 'You should have a JSON file downloaded'
+            },
+            {
+                'step_number': 6,
+                'title': 'Grant Permissions in Play Console',
+                'description': 'Return to Play Console and grant permissions to the service account',
+                'action': 'Select "Release Manager" role',
+                'required_permissions': ['Release Manager'],
+                'verification': 'Service account should appear in the list with correct permissions'
+            },
+            {
+                'step_number': 7,
+                'title': 'Enable Play Developer API',
+                'description': 'Ensure Google Play Developer API is enabled in your Google Cloud project',
+                'url': 'https://console.cloud.google.com/apis/library/androidpublisher.googleapis.com',
+                'action': 'Click "Enable API"',
+                'verification': 'API should show as "Enabled"'
+            }
+        ],
+        'validation_checklist': [
+            'Service account JSON key file downloaded',
+            'Service account has Release Manager role in Play Console',
+            'Google Play Developer API is enabled',
+            'You have the service account email address'
+        ],
+        'troubleshooting': {
+            'common_issues': [
+                {
+                    'issue': 'Cannot see "API access" option',
+                    'solution': 'You need to be the account owner or have Admin permissions'
+                },
+                {
+                    'issue': 'Service account not appearing in Play Console',
+                    'solution': 'Make sure you completed the linking step from Play Console to GCP'
+                }
+            ]
+        },
+        'next_steps': 'After completing these steps, you\'ll use the JSON key file as a GitHub Secret'
     }
 
 
@@ -520,89 +692,126 @@ def generate_github_workflow(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement generate_github_workflow logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate project_path
-    # project_path = validate_string_input(
-    #     project_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='project_path'
-    # )
-    # # Validate package_name
-    # package_name = validate_string_input(
-    #     package_name,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='package_name'
-    # )
-    # # Validate track
-    # track = validate_string_input(
-    #     track,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='track'
-    # )
-    # # Validate trigger_strategy
-    # trigger_strategy = validate_string_input(
-    #     trigger_strategy,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='trigger_strategy'
-    # )
-    # # Validate branch_name
-    # branch_name = validate_string_input(
-    #     branch_name,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='branch_name'
-    # )
-    # # Validate app_module_path
-    # app_module_path = validate_string_input(
-    #     app_module_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='app_module_path'
-    # )
-    # # Validate java_version
-    # java_version = validate_string_input(
-    #     java_version,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='java_version'
-    # )
-    # 
+    # Set defaults
+    if track is None:
+        track = "internal"
+    if trigger_strategy is None:
+        trigger_strategy = "manual"
+    if branch_name is None:
+        branch_name = f"release/{track}"
+    if app_module_path is None:
+        app_module_path = "app"
+    if java_version is None:
+        java_version = "17"
+
+    # Generate trigger configuration based on strategy
+    if trigger_strategy == "manual":
+        trigger_config = "workflow_dispatch:"
+    elif trigger_strategy == "branch":
+        trigger_config = f"""push:
+    branches:
+      - {branch_name}"""
+    elif trigger_strategy == "tag":
+        trigger_config = """push:
+    tags:
+      - 'v*'"""
+    else:
+        trigger_config = "workflow_dispatch:"
+
+    # Generate workflow content
+    workflow_content = f"""name: Deploy to Play Store {track}
+
+on:
+  {trigger_config}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK {java_version}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '{java_version}'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Decode Keystore
+        run: |
+          echo "${{{{ secrets.SIGNING_KEY_STORE_BASE64 }}}}" | base64 --decode > ${{{{ github.workspace }}}}/release.jks
+
+      - name: Build Release AAB
+        run: ./gradlew bundleRelease
+        env:
+          SIGNING_KEY_ALIAS: ${{{{ secrets.SIGNING_KEY_ALIAS }}}}
+          SIGNING_KEY_PASSWORD: ${{{{ secrets.SIGNING_KEY_PASSWORD }}}}
+          SIGNING_STORE_PASSWORD: ${{{{ secrets.SIGNING_STORE_PASSWORD }}}}
+          SIGNING_KEY_STORE_PATH: ${{{{ github.workspace }}}}/release.jks
+
+      - name: Upload to Google Play {track} Track
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{{{ secrets.SERVICE_ACCOUNT_JSON_PLAINTEXT }}}}
+          packageName: {package_name}
+          releaseFiles: {app_module_path}/build/outputs/bundle/release/app-release.aab
+          track: {track}
+          status: completed
+
+      - name: Clean up keystore
+        if: always()
+        run: rm -f ${{{{ github.workspace }}}}/release.jks
+"""
+
+    workflow_path = f".github/workflows/deploy-{track}.yml"
+
+    required_secrets = [
+        {
+            'name': 'SERVICE_ACCOUNT_JSON_PLAINTEXT',
+            'description': 'Contents of the service account JSON file',
+            'how_to_generate': 'Download from Google Cloud Console when creating service account key'
+        },
+        {
+            'name': 'SIGNING_KEY_STORE_BASE64',
+            'description': 'Base64-encoded keystore file',
+            'how_to_generate': 'Run: base64 -w 0 your-keystore.jks'
+        },
+        {
+            'name': 'SIGNING_KEY_ALIAS',
+            'description': 'The alias of your signing key',
+            'how_to_generate': 'This is what you specified when creating the keystore'
+        },
+        {
+            'name': 'SIGNING_KEY_PASSWORD',
+            'description': 'Password for your signing key',
+            'how_to_generate': 'This is what you specified when creating the keystore'
+        },
+        {
+            'name': 'SIGNING_STORE_PASSWORD',
+            'description': 'Password for your keystore',
+            'how_to_generate': 'This is what you specified when creating the keystore'
+        }
+    ]
 
     return {
         'success': True,
-        'message': 'TODO: Implement generate_github_workflow',
-        
-        'project_path': project_path,
-        
-        'package_name': package_name,
-        
-        'track': track,
-        
-        'trigger_strategy': trigger_strategy,
-        
-        'branch_name': branch_name,
-        
-        'app_module_path': app_module_path,
-        
-        'java_version': java_version,
-        
+        'workflow_path': workflow_path,
+        'workflow_content': workflow_content,
+        'required_secrets': required_secrets,
+        'instructions': [
+            'Create .github/workflows directory if it doesn\'t exist',
+            'Save the workflow_content to the workflow_path',
+            'Configure the required GitHub Secrets',
+            'Commit and push the workflow file',
+            'Test with a manual workflow dispatch'
+        ],
+        'estimated_build_time': '5-10 minutes',
+        'github_actions_cost': 'Free for public repos, 2000 minutes/month for private repos on free tier'
     }
 
 
@@ -786,44 +995,94 @@ def create_github_secrets_guide(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement create_github_secrets_guide logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate repo_url
-    # repo_url = validate_string_input(
-    #     repo_url,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='repo_url'
-    # )
-    # # Validate keystore_path
-    # keystore_path = validate_string_input(
-    #     keystore_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='keystore_path'
-    # )
-    # 
+    # Parse repo URL to extract owner and name
+    import re
+    github_match = re.match(r'https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$', repo_url)
+    if github_match:
+        repo_owner, repo_name = github_match.groups()
+        github_secrets_url = f"https://github.com/{repo_owner}/{repo_name}/settings/secrets/actions"
+    else:
+        github_secrets_url = repo_url + "/settings/secrets/actions"
+
+    example_command = "base64 -w 0 release.jks" if keystore_path else "base64 -w 0 your-keystore.jks"
 
     return {
         'success': True,
-        'message': 'TODO: Implement create_github_secrets_guide',
-        
-        'repo_url': repo_url,
-        
-        'keystore_path': keystore_path,
-        
+        'github_secrets_url': github_secrets_url,
+        'secrets': [
+            {
+                'name': 'SERVICE_ACCOUNT_JSON_PLAINTEXT',
+                'description': 'The complete contents of your Google Play service account JSON file',
+                'how_to_get_value': [
+                    'Open the JSON file you downloaded from Google Cloud Console',
+                    'Copy the entire file contents (all the JSON)',
+                    'Paste it directly into the secret value field'
+                ],
+                'is_sensitive': True,
+                'required': True
+            },
+            {
+                'name': 'SIGNING_KEY_STORE_BASE64',
+                'description': 'Your Android keystore file encoded as base64',
+                'how_to_get_value': [
+                    'Open terminal/command prompt',
+                    'Navigate to the directory containing your keystore',
+                    'Run: base64 -w 0 your-keystore.jks (Linux/Mac)',
+                    'Or: certutil -encode your-keystore.jks keystore-base64.txt (Windows)',
+                    'Copy the output and paste as the secret value'
+                ],
+                'example_command': example_command,
+                'is_sensitive': True,
+                'required': True
+            },
+            {
+                'name': 'SIGNING_KEY_ALIAS',
+                'description': 'The alias you chose when creating your keystore',
+                'how_to_get_value': [
+                    'This is the value you specified when creating the keystore',
+                    'If you forgot it, run: keytool -list -v -keystore your-keystore.jks'
+                ],
+                'is_sensitive': False,
+                'required': True
+            },
+            {
+                'name': 'SIGNING_KEY_PASSWORD',
+                'description': 'The password for your signing key',
+                'how_to_get_value': [
+                    'This is the password you set when creating the keystore key'
+                ],
+                'is_sensitive': True,
+                'required': True
+            },
+            {
+                'name': 'SIGNING_STORE_PASSWORD',
+                'description': 'The password for your keystore file',
+                'how_to_get_value': [
+                    'This is the password you set when creating the keystore'
+                ],
+                'is_sensitive': True,
+                'required': True
+            }
+        ],
+        'step_by_step_instructions': [
+            'Navigate to your GitHub repository',
+            'Click on Settings tab',
+            'In left sidebar, click "Secrets and variables" > "Actions"',
+            'Click "New repository secret" button',
+            'For each secret above:',
+            '  - Enter the exact secret name (case-sensitive)',
+            '  - Follow the "how_to_get_value" instructions',
+            '  - Paste the value',
+            '  - Click "Add secret"',
+            'Verify all 5 secrets are listed'
+        ],
+        'security_reminders': [
+            'Never commit secrets to your repository',
+            'Never log or print secret values',
+            'Store passwords in a secure password manager',
+            'Back up your keystore and passwords securely',
+            'Rotate service account keys periodically'
+        ]
     }
 
 
