@@ -75,7 +75,6 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
 
                 return {'success': True, 'data': data}
     """
-    from pathlib import Path
     import re
 
     # Validate path for security (Issue #5, #19)
@@ -353,7 +352,6 @@ def generate_keystore(
     import subprocess
     import base64
     import os
-    from pathlib import Path
 
     # Set defaults
     if validity_days is None:
@@ -454,7 +452,9 @@ def generate_keystore(
         if result.returncode != 0:
             # Redact sensitive data from error output (Issue #20)
             error_msg = result.stderr if result.stderr else result.stdout
-            error_msg = redact_sensitive_data(error_msg) if error_msg else "Unknown error"
+            error_msg = (
+                redact_sensitive_data(error_msg) if error_msg else "Unknown error"
+            )
 
             if (
                 "command not found" in error_msg.lower()
@@ -595,7 +595,7 @@ def generate_signing_config(
 
     # Validate project_path (Issue #7) - doesn't need to exist for generating config
     try:
-        project_path_obj = validate_project_path(project_path, must_exist=False)
+        validate_project_path(project_path, must_exist=False)
     except ValueError as e:
         return {"success": False, "error": f"Invalid project path: {e}"}
 
@@ -928,7 +928,7 @@ def generate_github_workflow(
     try:
         track = validate_track(track)
         # Don't require path to exist for workflow generation
-        project_path_obj = validate_project_path(project_path, must_exist=False)
+        validate_project_path(project_path, must_exist=False)
         package_name = validate_android_package_name(package_name)
         # Validate other string inputs
         trigger_strategy = validate_string_input(
@@ -1480,8 +1480,6 @@ def validate_play_store_setup(
 
                 return {'success': True, 'data': data}
     """
-    from pathlib import Path
-
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build
