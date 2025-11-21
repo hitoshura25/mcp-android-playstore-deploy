@@ -56,3 +56,9 @@ hitoshura25-mcp-android-playstore-deploy-cli = "hitoshura25_mcp_android_playstor
 Homepage = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy"
 Repository = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy"
 Issues = "https://github.com/vinayak-menon/hitoshura25-mcp-android-playstore-deploy/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
