@@ -1,6 +1,8 @@
 # mcp-android-playstore-deploy
 MCP Server to help with Play Store deployments
 
+**👉 Want to use this with Claude Desktop? See the [Complete Claude Usage Guide →](CLAUDE-USAGE-GUIDE.md)**
+
 ---
 
 <!-- MCP-GENERATOR-CONTENT-START:hitoshura25-mcp-android-playstore-deploy -->
@@ -12,6 +14,12 @@ MCP Server to help with Play Store deployments
 # hitoshura25-mcp-android-playstore-deploy
 
 MCP server that helps developers set up automated Google Play Store deployment for Android apps
+
+## Quick Links
+
+- **[📖 Claude Desktop User Guide](CLAUDE-USAGE-GUIDE.md)** - Complete guide for using this MCP server with Claude Desktop
+- **[🔧 MCP Configuration](MCP-USAGE.md)** - Technical MCP setup details
+- **[🔒 Security Guidelines](SECURITY.md)** - Security best practices
 
 ## Installation
 
