@@ -36,7 +36,7 @@ jobs:
     needs: [get-new-version]
     with:
       python_version: '3.10'
-      test_path: 'tests'
+      test_path: 'hitoshura25_mcp_android_playstore_deploy'
       artifact_version: ${{ needs.get-new-version.outputs.new_version }}
 
   publish-to-testpypi:
