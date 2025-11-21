@@ -12,7 +12,7 @@ on:
         description: 'Path to tests'
         required: false
         type: string
-        default: 'hitoshura25_mcp_android_playstore_deploy'
+        default: 'tests'
       artifact_version:
         description: 'Version to use for the artifact (overrides setuptools_scm detection)'
         required: false
