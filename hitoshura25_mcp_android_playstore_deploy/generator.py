@@ -80,35 +80,179 @@ def analyze_android_project(
 
                 return {'success': True, 'data': data}
     """
-    # TODO: Implement analyze_android_project logic
-    #
-    # SECURITY CHECKLIST:
-    # [ ] Validate all inputs
-    # [ ] Apply rate limiting if needed
-    # [ ] Add audit logging for security-relevant operations
-    # [ ] Redact sensitive data from outputs
-    # [ ] Use path/command validation for file/system operations
-    # [ ] Set timeouts for long-running operations
-    # [ ] Handle errors without leaking sensitive information
-    #
-    # Example with security:
-    # from .security_utils import validate_string_input, audit_log
-    #
-    # # Validate project_path
-    # project_path = validate_string_input(
-    #     project_path,
-    #     max_length=1000,
-    #     allowed_pattern=r'^[a-zA-Z0-9\s\-_\.]+$',
-    #     field_name='project_path'
-    # )
-    # 
+    from pathlib import Path
+    import re
+
+    project_path_obj = Path(project_path).resolve()
+
+    # Validate project exists and is a directory
+    if not project_path_obj.exists():
+        return {
+            'success': False,
+            'error': f'Project path does not exist: {project_path}'
+        }
+
+    if not project_path_obj.is_dir():
+        return {
+            'success': False,
+            'error': f'Path is not a directory: {project_path}'
+        }
+
+    # Check for Android project markers
+    settings_gradle_kts = project_path_obj / "settings.gradle.kts"
+    settings_gradle = project_path_obj / "settings.gradle"
+    build_gradle_kts = project_path_obj / "build.gradle.kts"
+    build_gradle = project_path_obj / "build.gradle"
+    app_build_gradle_kts = project_path_obj / "app" / "build.gradle.kts"
+    app_build_gradle = project_path_obj / "app" / "build.gradle"
+
+    has_settings = settings_gradle_kts.exists() or settings_gradle.exists()
+    has_root_build = build_gradle_kts.exists() or build_gradle.exists()
+
+    if not (has_settings and has_root_build):
+        return {
+            'success': False,
+            'error': 'Path does not appear to be an Android project',
+            'details': 'Expected to find settings.gradle(.kts) and build.gradle(.kts)'
+        }
+
+    # Determine build file paths
+    app_build_file = app_build_gradle_kts if app_build_gradle_kts.exists() else (app_build_gradle if app_build_gradle.exists() else None)
+
+    if not app_build_file:
+        return {
+            'success': False,
+            'error': 'Could not find app/build.gradle(.kts)',
+            'details': 'This tool expects a standard Android project structure'
+        }
+
+    # Parse app build.gradle
+    try:
+        build_content = app_build_file.read_text()
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'Failed to read {app_build_file}: {str(e)}'
+        }
+
+    # Extract configuration using regex
+    package_name = None
+    namespace = None
+    version_code = None
+    version_name = None
+    compile_sdk = None
+    target_sdk = None
+    min_sdk = None
+    has_signing_config = False
+    is_minify_enabled = False
+
+    # Extract package name (applicationId or namespace)
+    app_id_match = re.search(r'applicationId\s*=?\s*["\']([^"\']+)["\']', build_content)
+    if app_id_match:
+        package_name = app_id_match.group(1)
+
+    namespace_match = re.search(r'namespace\s*=?\s*["\']([^"\']+)["\']', build_content)
+    if namespace_match:
+        namespace = namespace_match.group(1)
+        if not package_name:
+            package_name = namespace
+
+    # Extract version info
+    version_code_match = re.search(r'versionCode\s*=?\s*(\d+)', build_content)
+    if version_code_match:
+        version_code = int(version_code_match.group(1))
+
+    version_name_match = re.search(r'versionName\s*=?\s*["\']([^"\']+)["\']', build_content)
+    if version_name_match:
+        version_name = version_name_match.group(1)
+
+    # Extract SDK versions
+    compile_sdk_match = re.search(r'compileSdk\s*=?\s*(\d+)', build_content)
+    if compile_sdk_match:
+        compile_sdk = int(compile_sdk_match.group(1))
+
+    target_sdk_match = re.search(r'targetSdk\s*=?\s*(\d+)', build_content)
+    if target_sdk_match:
+        target_sdk = int(target_sdk_match.group(1))
+
+    min_sdk_match = re.search(r'minSdk\s*=?\s*(\d+)', build_content)
+    if min_sdk_match:
+        min_sdk = int(min_sdk_match.group(1))
+
+    # Check for signing config
+    has_signing_config = 'signingConfig' in build_content and 'signingConfigs' in build_content
+
+    # Check for minify enabled
+    is_minify_enabled = 'isMinifyEnabled = true' in build_content or 'minifyEnabled true' in build_content
+
+    # Detect project type
+    project_type = "native_android"
+    if (project_path_obj / "package.json").exists():
+        project_type = "react_native"
+    elif (project_path_obj / "pubspec.yaml").exists():
+        project_type = "flutter"
+
+    # Check for GitHub Actions
+    workflows_dir = project_path_obj / ".github" / "workflows"
+    has_github_actions = workflows_dir.exists()
+    github_workflows = []
+    if has_github_actions:
+        github_workflows = [f.name for f in workflows_dir.glob("*.yml")] + [f.name for f in workflows_dir.glob("*.yaml")]
+
+    # Generate recommendations
+    recommendations = []
+    issues = []
+
+    if not is_minify_enabled:
+        recommendations.append("Enable code minification for release builds")
+        issues.append({
+            'severity': 'high',
+            'message': 'Code minification is disabled',
+            'fix': 'Set isMinifyEnabled = true in release buildType'
+        })
+
+    if not has_signing_config:
+        recommendations.append("Add signing configuration")
+        issues.append({
+            'severity': 'critical',
+            'message': 'No signing configuration found',
+            'fix': 'Use generate_signing_config tool to add signing configuration'
+        })
+
+    if not has_github_actions:
+        recommendations.append("Create GitHub Actions workflow")
+        issues.append({
+            'severity': 'medium',
+            'message': 'No GitHub Actions workflows found',
+            'fix': 'Use generate_github_workflow tool to create deployment workflow'
+        })
+
+    if target_sdk and target_sdk < 33:
+        recommendations.append(f"Update targetSdk to 33 or higher (currently {target_sdk})")
+        issues.append({
+            'severity': 'high',
+            'message': f'targetSdk {target_sdk} is below Google Play requirements',
+            'fix': 'Update targetSdk to at least 33 in build.gradle'
+        })
 
     return {
         'success': True,
-        'message': 'TODO: Implement analyze_android_project',
-        
-        'project_path': project_path,
-        
+        'project_type': project_type,
+        'build_system': 'gradle',
+        'package_name': package_name or 'unknown',
+        'namespace': namespace,
+        'has_signing_config': has_signing_config,
+        'has_github_actions': has_github_actions,
+        'github_workflows': github_workflows,
+        'current_version_code': version_code or 1,
+        'current_version_name': version_name or '1.0',
+        'target_sdk': target_sdk,
+        'min_sdk': min_sdk,
+        'compile_sdk': compile_sdk,
+        'build_gradle_path': str(app_build_file),
+        'is_minify_enabled': is_minify_enabled,
+        'recommendations': recommendations,
+        'issues': issues
     }
 
 
