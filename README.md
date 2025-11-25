@@ -1,7 +1,32 @@
 # mcp-android-playstore-deploy
 MCP Server to help with Play Store deployments
 
-**👉 Want to use this with Claude Desktop? See the [Complete Claude Usage Guide →](CLAUDE-USAGE-GUIDE.md)**
+**👉 Want to use this with Claude Desktop? See the [Complete Claude Usage Guide →](https://github.com/hitoshura25/mcp-android-playstore-deploy/blob/main/CLAUDE-USAGE-GUIDE.md)**
+
+---
+
+## 🚀 Getting Started
+
+**New to this tool? Start here!**
+
+Open Claude Desktop and use this prompt:
+
+```
+I want to set up automated Google Play Store deployment for my Android app using GitHub Actions.
+
+My Android project is located at: /path/to/your/android/app
+
+Please walk me through the complete setup process step by step. Start by analyzing my project.
+```
+
+Claude will guide you through:
+- ✅ Analyzing your project structure
+- ✅ Generating a secure keystore
+- ✅ Setting up Google Play Service Account
+- ✅ Creating GitHub Actions workflow
+- ✅ Configuring secrets and testing
+
+**📖 For detailed guidance**, see the [Complete Claude Usage Guide](https://github.com/hitoshura25/mcp-android-playstore-deploy/blob/main/CLAUDE-USAGE-GUIDE.md).
 
 ---
 
@@ -17,9 +42,9 @@ MCP server that helps developers set up automated Google Play Store deployment f
 
 ## Quick Links
 
-- **[📖 Claude Desktop User Guide](CLAUDE-USAGE-GUIDE.md)** - Complete guide for using this MCP server with Claude Desktop
-- **[🔧 MCP Configuration](MCP-USAGE.md)** - Technical MCP setup details
-- **[🔒 Security Guidelines](SECURITY.md)** - Security best practices
+- **[📖 Claude Desktop User Guide](https://github.com/hitoshura25/mcp-android-playstore-deploy/blob/main/CLAUDE-USAGE-GUIDE.md)** - Complete guide for using this MCP server with Claude Desktop
+- **[🔧 MCP Configuration](https://github.com/hitoshura25/mcp-android-playstore-deploy/blob/main/MCP-USAGE.md)** - Technical MCP setup details
+- **[🔒 Security Guidelines](https://github.com/hitoshura25/mcp-android-playstore-deploy/blob/main/SECURITY.md)** - Security best practices
 
 ## Installation
 
@@ -155,7 +180,7 @@ hitoshura25-mcp-android-playstore-deploy setup_service_account_guide
 Generate a complete GitHub Actions workflow file for Play Store deployment
 
 ```bash
-hitoshura25-mcp-android-playstore-deploy generate_github_workflow --project_path <value> --package_name <value> --track <value> --trigger_strategy <value> --branch_name <value> --app_module_path <value> --java_version <value>
+hitoshura25-mcp-android-playstore-deploy generate_github_workflow --project_path <value> --package_name <value> --track <value> --trigger_strategy <value> --branch_name <value> --app_module_path <value> --java_version <value> --enforce_proguard <value> --mapping_file_path <value> --include_release_notes <value> --release_notes_directory <value>
 ```
 
 **Parameters:**
@@ -173,6 +198,14 @@ hitoshura25-mcp-android-playstore-deploy generate_github_workflow --project_path
 - `--app_module_path` (string): Path to app module relative to project root
 
 - `--java_version` (string): Java/JDK version to use for builds
+
+- `--enforce_proguard` (boolean): Automatically enable ProGuard minification (default: True)
+
+- `--mapping_file_path` (string): Override default ProGuard mapping file path
+
+- `--include_release_notes` (boolean): Include release notes directory (default: True)
+
+- `--release_notes_directory` (string): Path to release notes directory (default: distribution/whatsnew)
 
 
 
@@ -327,6 +360,14 @@ Generate a complete GitHub Actions workflow file for Play Store deployment
 - `app_module_path` (string): Path to app module relative to project root
 
 - `java_version` (string): Java/JDK version to use for builds
+
+- `enforce_proguard` (boolean): If True, ensure isMinifyEnabled=true in build.gradle.kts (default: True)
+
+- `mapping_file_path` (string): Override default ProGuard mapping file path
+
+- `include_release_notes` (boolean): Include release notes directory (default: True)
+
+- `release_notes_directory` (string): Path to release notes directory (default: distribution/whatsnew)
 
 
 
