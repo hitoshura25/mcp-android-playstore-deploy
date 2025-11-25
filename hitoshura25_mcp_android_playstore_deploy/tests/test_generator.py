@@ -1,6 +1,7 @@
 """Tests for MCP tools in generator.py"""
 
 import pytest
+import yaml
 from pathlib import Path
 from hitoshura25_mcp_android_playstore_deploy.generator import (
     analyze_android_project,
@@ -297,8 +298,6 @@ def test_dynamic_instructions_with_release_notes():
 
 def test_yaml_validity_with_optional_params():
     """Test that generated YAML is valid with optional parameters"""
-    import yaml
-
     result = generate_github_workflow(
         project_path="/fake/path", package_name="com.example.app", enforce_proguard=True, include_release_notes=True
     )
