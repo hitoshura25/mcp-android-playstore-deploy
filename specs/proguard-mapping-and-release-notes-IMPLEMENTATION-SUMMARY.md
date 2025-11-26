@@ -70,10 +70,11 @@ if include_mapping_file is None:
 ```python
 return {
     # ... existing fields ...
-    "mapping_file_config": {
-        "enabled": True/False,
-        "path": "app/build/outputs/mapping/release/mapping.txt",
-        "auto_detected": True/False,
+    "proguard_config": {
+        "enforced": True/False,
+        "was_enabled_by_mcp": True/False,
+        "modified_files": [...],
+        "mapping_file_path": "app/build/outputs/mapping/release/mapping.txt",
         "why_important": "..."
     },
     "release_notes_config": {

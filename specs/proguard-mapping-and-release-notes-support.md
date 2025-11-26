@@ -225,10 +225,12 @@ return {
         "Test with a manual workflow dispatch",
     ],
     # NEW FIELDS:
-    "mapping_file_config": {
-        "enabled": include_mapping_file,
-        "path": mapping_file_path if include_mapping_file else None,
-        "auto_detected": include_mapping_file is None,
+    "proguard_config": {
+        "enforced": enforce_proguard,
+        "was_enabled_by_mcp": proguard_was_enabled,
+        "modified_files": proguard_modified_files,
+        "mapping_file_path": mapping_file_path if enforce_proguard else None,
+        "why_important": "..." if enforce_proguard else None,
     },
     "release_notes_config": {
         "enabled": include_release_notes,
@@ -442,15 +444,16 @@ release_notes_setup_guide = """
        "workflow_content": workflow_content,
        "required_secrets": required_secrets,
        "instructions": instructions,
-       "mapping_file_config": {
-           "enabled": include_mapping_file,
-           "path": mapping_file_path if include_mapping_file else None,
-           "auto_detected": include_mapping_file is None,
+       "proguard_config": {
+           "enforced": enforce_proguard,
+           "was_enabled_by_mcp": proguard_was_enabled,
+           "modified_files": proguard_modified_files,
+           "mapping_file_path": mapping_file_path if enforce_proguard else None,
            "why_important": (
-               "ProGuard mapping files allow Google Play Console to deobfuscate "
-               "crash stack traces, making it possible to debug production crashes. "
-               "Without this file, crash reports will show obfuscated class and method names."
-           ) if include_mapping_file else None,
+               "ProGuard/R8 mapping files enable crash deobfuscation in Play Console. "
+               "Without mapping files, crash reports show obfuscated class/method names. "
+               "This MCP automatically enabled minification for production best practices."
+           ) if enforce_proguard else None,
        },
        "release_notes_config": {
            "enabled": include_release_notes,
@@ -773,7 +776,7 @@ class TestGenerateGithubWorkflow:
 
         assert result["success"] is True
         assert "mappingFile: app/build/outputs/mapping/release/mapping.txt" in result["workflow_content"]
-        assert result["mapping_file_config"]["enabled"] is True
+        assert result["proguard_config"]["enforced"] is True
 
     def test_proguard_mapping_auto_detect(self, tmp_path):
         """Test ProGuard mapping auto-detection"""
@@ -805,8 +808,8 @@ class TestGenerateGithubWorkflow:
 
         assert result["success"] is True
         assert "mappingFile" in result["workflow_content"]
-        assert result["mapping_file_config"]["enabled"] is True
-        assert result["mapping_file_config"]["auto_detected"] is True
+        assert result["proguard_config"]["enforced"] is True
+        assert result["proguard_config"]["was_enabled_by_mcp"] is True
 
     def test_custom_mapping_path(self):
         """Test custom ProGuard mapping path"""
@@ -914,7 +917,7 @@ class TestFullWorkflowWithProGuard:
         )
 
         assert result["success"] is True
-        assert result["mapping_file_config"]["enabled"] is True
+        assert result["proguard_config"]["enforced"] is True
 
         # Verify workflow YAML is valid
         import yaml
@@ -963,8 +966,8 @@ result = generate_github_workflow(
 
 # If project has isMinifyEnabled = true:
 #   - Automatically includes mappingFile
-#   - result["mapping_file_config"]["enabled"] = True
-#   - result["mapping_file_config"]["auto_detected"] = True
+#   - result["proguard_config"]["enforced"] = True
+#   - result["proguard_config"]["was_enabled_by_mcp"] = True
 
 # Always includes release notes by default:
 #   - result["release_notes_config"]["enabled"] = True

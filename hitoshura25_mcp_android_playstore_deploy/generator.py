@@ -1108,28 +1108,46 @@ def generate_github_workflow(
                 # Read current content
                 content = build_gradle_path.read_text()
 
-                # Check if release buildType exists
-                if "buildTypes" not in content or "release" not in content:
+                # Check if buildTypes exists
+                if "buildTypes" not in content:
                     return {
                         "success": False,
-                        "error": "Could not find 'buildTypes { release { ... } }' in build.gradle.kts. "
+                        "error": "Could not find 'buildTypes' in build.gradle.kts. "
                         + "Manual ProGuard configuration required.",
                     }
 
-                # Modify content to add isMinifyEnabled = true
-                import re
+                # Check if release buildType exists (more specific pattern)
+                if not re.search(r"release\s*\{", content):
+                    return {
+                        "success": False,
+                        "error": "Could not find 'release { ... }' buildType in build.gradle.kts. "
+                        + "Manual ProGuard configuration required.",
+                    }
 
-                # Pattern to find release block and add/update isMinifyEnabled
-                pattern = r"(release\s*\{[^}]*?)(isMinifyEnabled\s*=\s*false)"
+                # Detect indentation style from file
+                indent_match = re.search(r"\n(\s+)\w+\s*\{", content)
+                base_indent = indent_match.group(1) if indent_match else "    "
+                indent = base_indent + base_indent  # One more level for inside release block
 
-                if re.search(pattern, content):
+                # Pattern to find and replace isMinifyEnabled = false
+                # Use re.DOTALL to handle nested braces correctly
+                pattern_disable = r"(release\s*\{.*?)(isMinifyEnabled\s*=\s*false)"
+
+                if re.search(pattern_disable, content, re.DOTALL):
                     # Replace false with true
-                    new_content = re.sub(pattern, r"\1isMinifyEnabled = true", content)
+                    new_content = re.sub(pattern_disable, r"\1isMinifyEnabled = true", content, flags=re.DOTALL)
                 else:
                     # Add isMinifyEnabled = true after release {
-                    pattern = r"(release\s*\{)"
-                    replacement = r"\1\n            isMinifyEnabled = true"
-                    new_content = re.sub(pattern, replacement, content, count=1)
+                    pattern_add = r"(release\s*\{\s*\n)"
+                    replacement = f"\\1{indent}isMinifyEnabled = true\n"
+                    new_content, num_subs = re.subn(pattern_add, replacement, content, count=1)
+
+                    if num_subs == 0:
+                        return {
+                            "success": False,
+                            "error": "Could not locate 'release {' block to add isMinifyEnabled. "
+                            + "Manual ProGuard configuration required in build.gradle.kts",
+                        }
 
                 # Write back
                 build_gradle_path.write_text(new_content)
