@@ -40,6 +40,7 @@ dynamic = ["version"]
 test = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+    "pyyaml>=6.0.0",
 ]
 dev = [
     "hitoshura25-mcp-android-playstore-deploy[test]",

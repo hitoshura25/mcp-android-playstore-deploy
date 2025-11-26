@@ -131,6 +131,10 @@ async def generate_github_workflow(
     branch_name: str = None,
     app_module_path: str = None,
     java_version: str = None,
+    enforce_proguard: bool = True,
+    mapping_file_path: str = None,
+    include_release_notes: bool = True,
+    release_notes_directory: str = None,
 ) -> str:
     """Generate a complete GitHub Actions workflow file for Play Store deployment
 
@@ -151,6 +155,14 @@ async def generate_github_workflow(
 
         java_version: Java/JDK version to use for builds
 
+        enforce_proguard: If True, ensure isMinifyEnabled=true in build.gradle.kts (default: True)
+
+        mapping_file_path: Override default ProGuard mapping file path
+
+        include_release_notes: Include release notes directory (default: True)
+
+        release_notes_directory: Path to release notes directory (default: distribution/whatsnew)
+
 
 
     Returns:
@@ -164,6 +176,10 @@ async def generate_github_workflow(
         branch_name=branch_name,
         app_module_path=app_module_path,
         java_version=java_version,
+        enforce_proguard=enforce_proguard,
+        mapping_file_path=mapping_file_path,
+        include_release_notes=include_release_notes,
+        release_notes_directory=release_notes_directory,
     )
     # Handle both sync and async business logic
     if inspect.isawaitable(result):

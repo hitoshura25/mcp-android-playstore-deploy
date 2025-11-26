@@ -1,6 +1,7 @@
 """Tests for MCP tools in generator.py"""
 
 import pytest
+import yaml
 from pathlib import Path
 from hitoshura25_mcp_android_playstore_deploy.generator import (
     analyze_android_project,
@@ -136,3 +137,178 @@ def test_generate_keystore_already_exists():
         )
         assert result2["success"] is False
         assert "already exists" in result2["error"]
+
+
+# NEW: Tests for ProGuard mapping and release notes support
+
+
+def test_generate_workflow_with_proguard_defaults():
+    """Test that ProGuard mapping is enabled by default"""
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app")
+
+    assert result["success"] is True
+    assert "proguard_config" in result
+    assert result["proguard_config"]["enforced"] is True
+    assert "mapping/release/mapping.txt" in result["proguard_config"]["mapping_file_path"]
+    assert "mappingFile:" in result["workflow_content"]
+
+
+def test_generate_workflow_with_proguard_disabled():
+    """Test that ProGuard can be explicitly disabled"""
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app", enforce_proguard=False)
+
+    assert result["success"] is True
+    assert "proguard_config" in result
+    assert result["proguard_config"]["enforced"] is False
+    assert result["proguard_config"]["mapping_file_path"] is None
+    # Should not contain mappingFile parameter in workflow
+    assert "mappingFile:" not in result["workflow_content"]
+
+
+def test_generate_workflow_with_custom_mapping_path():
+    """Test custom ProGuard mapping file path"""
+    result = generate_github_workflow(
+        project_path="/fake/path",
+        package_name="com.example.app",
+        enforce_proguard=True,
+        mapping_file_path="custom/path/mapping.txt",
+    )
+
+    assert result["success"] is True
+    assert result["proguard_config"]["mapping_file_path"] == "custom/path/mapping.txt"
+    assert "mappingFile: custom/path/mapping.txt" in result["workflow_content"]
+
+
+def test_generate_workflow_with_release_notes_defaults():
+    """Test that release notes are enabled by default"""
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app")
+
+    assert result["success"] is True
+    assert "release_notes_config" in result
+    assert result["release_notes_config"]["enabled"] is True
+    assert result["release_notes_config"]["directory"] == "distribution/whatsnew"
+    assert "whatsNewDirectory:" in result["workflow_content"]
+
+
+def test_generate_workflow_with_release_notes_disabled():
+    """Test that release notes can be explicitly disabled"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", include_release_notes=False
+    )
+
+    assert result["success"] is True
+    assert "release_notes_config" in result
+    assert result["release_notes_config"]["enabled"] is False
+    assert result["release_notes_config"]["directory"] is None
+    # Should not contain whatsNewDirectory parameter in workflow
+    assert "whatsNewDirectory:" not in result["workflow_content"]
+
+
+def test_generate_workflow_with_custom_release_notes_directory():
+    """Test custom release notes directory"""
+    result = generate_github_workflow(
+        project_path="/fake/path",
+        package_name="com.example.app",
+        include_release_notes=True,
+        release_notes_directory="custom/release-notes",
+    )
+
+    assert result["success"] is True
+    assert result["release_notes_config"]["directory"] == "custom/release-notes"
+    assert "whatsNewDirectory: custom/release-notes" in result["workflow_content"]
+
+
+def test_generate_workflow_with_both_features_disabled():
+    """Test workflow generation with both ProGuard and release notes disabled"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", enforce_proguard=False, include_release_notes=False
+    )
+
+    assert result["success"] is True
+    assert result["proguard_config"]["enforced"] is False
+    assert result["release_notes_config"]["enabled"] is False
+    assert "mappingFile:" not in result["workflow_content"]
+    assert "whatsNewDirectory:" not in result["workflow_content"]
+
+
+def test_proguard_config_structure():
+    """Test that proguard_config has proper structure"""
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app", enforce_proguard=True)
+
+    assert result["success"] is True
+    config = result["proguard_config"]
+    assert "enforced" in config
+    assert "was_enabled_by_mcp" in config
+    assert "modified_files" in config
+    assert "mapping_file_path" in config
+    assert "why_important" in config
+    assert isinstance(config["modified_files"], list)
+
+
+def test_release_notes_config_structure():
+    """Test that release_notes_config has proper structure"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", include_release_notes=True
+    )
+
+    assert result["success"] is True
+    config = result["release_notes_config"]
+    assert "enabled" in config
+    assert "directory" in config
+    assert "created_by_mcp" in config
+    assert "locales_created" in config
+    assert "setup_instructions" in config
+    assert "supported_locales" in config
+    assert isinstance(config["locales_created"], list)
+    assert isinstance(config["supported_locales"], list)
+
+
+def test_release_notes_setup_instructions():
+    """Test that release notes setup instructions are included"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", include_release_notes=True
+    )
+
+    assert result["success"] is True
+    instructions = result["release_notes_config"]["setup_instructions"]
+    assert "Release Notes Setup" in instructions
+    assert "whatsnew" in instructions
+    assert "500 characters" in instructions
+
+
+def test_dynamic_instructions_with_proguard():
+    """Test that instructions include ProGuard information when enabled"""
+    result = generate_github_workflow(project_path="/fake/path", package_name="com.example.app", enforce_proguard=True)
+
+    assert result["success"] is True
+    instructions_text = "\n".join(result["instructions"])
+    assert "ProGuard" in instructions_text or "Mapping" in instructions_text
+
+
+def test_dynamic_instructions_with_release_notes():
+    """Test that instructions include release notes information when enabled"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", include_release_notes=True
+    )
+
+    assert result["success"] is True
+    instructions_text = "\n".join(result["instructions"])
+    assert "Release Notes" in instructions_text
+
+
+def test_yaml_validity_with_optional_params():
+    """Test that generated YAML is valid with optional parameters"""
+    result = generate_github_workflow(
+        project_path="/fake/path", package_name="com.example.app", enforce_proguard=True, include_release_notes=True
+    )
+
+    assert result["success"] is True
+
+    # Try to parse the YAML to ensure it's valid
+    try:
+        parsed = yaml.safe_load(result["workflow_content"])
+        assert parsed is not None
+        assert "name" in parsed
+        assert "jobs" in parsed
+    except yaml.YAMLError as e:
+        pytest.fail(f"Generated YAML is invalid: {e}")

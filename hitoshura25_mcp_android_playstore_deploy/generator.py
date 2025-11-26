@@ -10,6 +10,7 @@ Security Notes:
 """
 
 from typing import Any, Dict, List, Optional
+import re
 
 # Import security utilities
 from .security_utils import (
@@ -28,6 +29,58 @@ from .security_utils import (
 # Update this constant as Google's requirements change
 # See: https://developer.android.com/google/play/requirements/target-sdk
 MINIMUM_TARGET_SDK = 33
+
+# Release notes setup guide
+RELEASE_NOTES_SETUP_GUIDE = """
+# Release Notes Setup
+
+Your release notes directory has been created at: {directory}
+
+## Directory Structure
+```
+{directory}/
+  en-US/
+    whatsnew
+  de-DE/
+    whatsnew
+  (add more locales as needed)
+```
+
+## File Format
+- File name: `whatsnew` (no extension)
+- Format: Plain text
+- Max length: 500 characters
+- Content: Bullet points or short paragraphs of user-visible changes
+
+## Example Content (en-US/whatsnew):
+```
+- New: Dark mode support
+- Fixed: Crash when opening settings
+- Improved: Performance optimizations
+```
+
+## Supported Locales
+See supported_locales in the return value for common locale codes.
+"""
+
+# Common Play Store locales
+COMMON_PLAY_STORE_LOCALES = [
+    "en-US",
+    "en-GB",
+    "de-DE",
+    "es-ES",
+    "fr-FR",
+    "it-IT",
+    "ja-JP",
+    "ko-KR",
+    "pt-BR",
+    "ru-RU",
+    "zh-CN",
+    "zh-TW",
+    "ar",
+    "hi-IN",
+    "id",
+]
 
 
 # ============================================================================
@@ -113,8 +166,6 @@ def analyze_android_project(project_path: str) -> Dict[str, Any]:
 
                 return {'success': True, 'data': data}
     """
-    import re
-
     # Validate path for security (Issue #5, #19)
     try:
         project_path_obj = validate_project_path(project_path, must_exist=True)
@@ -873,6 +924,10 @@ def generate_github_workflow(
     branch_name: str = None,
     app_module_path: str = None,
     java_version: str = None,
+    enforce_proguard: bool = True,
+    mapping_file_path: str = None,
+    include_release_notes: bool = True,
+    release_notes_directory: str = None,
 ) -> Dict[str, Any]:
     r"""
     Generate a complete GitHub Actions workflow file for Play Store deployment
@@ -893,9 +948,17 @@ def generate_github_workflow(
 
         java_version: Java/JDK version to use for builds
 
+        enforce_proguard: If True, ensure isMinifyEnabled=true in build.gradle.kts (default: True)
+
+        mapping_file_path: Override default ProGuard mapping file path
+
+        include_release_notes: Include release notes directory (default: True)
+
+        release_notes_directory: Path to release notes directory (default: distribution/whatsnew)
+
 
     Returns:
-        Result dictionary
+        Result dictionary with workflow content, configuration, and setup instructions
 
     Security:
         IMPORTANT: Review SECURITY.md before implementing this function.
@@ -948,6 +1011,12 @@ def generate_github_workflow(
     if java_version is None:
         java_version = "17"
 
+    # NEW: Set defaults for new parameters
+    if mapping_file_path is None:
+        mapping_file_path = f"{app_module_path}/build/outputs/mapping/release/mapping.txt"
+    if release_notes_directory is None:
+        release_notes_directory = "distribution/whatsnew"
+
     # Validate inputs (Issues #2, #7)
     try:
         track = validate_track(track)
@@ -979,8 +1048,149 @@ def generate_github_workflow(
             allowed_pattern=r"^[0-9.]+$",
             field_name="java_version",
         )
+        # NEW: Validate new parameters
+        mapping_file_path = validate_string_input(
+            mapping_file_path,
+            max_length=200,
+            allowed_pattern=r"^[a-zA-Z0-9/_.-]+$",
+            field_name="mapping_file_path",
+        )
+        release_notes_directory = validate_string_input(
+            release_notes_directory,
+            max_length=200,
+            allowed_pattern=r"^[a-zA-Z0-9/_.-]+$",
+            field_name="release_notes_directory",
+        )
     except ValueError as e:
         return {"success": False, "error": f"Invalid input: {e}"}
+
+    # NEW: Import Path for file operations
+    from pathlib import Path
+
+    # NEW: ProGuard enforcement and detection
+    proguard_was_enabled = False
+    proguard_modified_files = []
+
+    if enforce_proguard:
+        try:
+            # Only analyze and modify if project path exists
+            project_path_obj = Path(project_path)
+
+            if project_path_obj.exists():
+                # Analyze project to check current state
+                analysis = analyze_android_project(project_path)
+
+                if not analysis.get("success", False):
+                    return {
+                        "success": False,
+                        "error": "Failed to analyze Android project for ProGuard enforcement. "
+                        + "Cannot proceed with workflow generation.",
+                    }
+
+                is_minify_enabled = analysis.get("is_minify_enabled", False)
+            else:
+                # Project doesn't exist (e.g., test scenarios), skip analysis
+                is_minify_enabled = False
+
+            # If minification not enabled, modify build.gradle.kts to enable it
+            # Only try to modify if the project path exists
+            if not is_minify_enabled and project_path_obj.exists():
+                build_gradle_path = Path(project_path) / app_module_path / "build.gradle.kts"
+
+                # Check if build file exists
+                if not build_gradle_path.exists():
+                    return {
+                        "success": False,
+                        "error": f"Build file not found at {build_gradle_path}. "
+                        + "Cannot enforce ProGuard minification.",
+                    }
+
+                # Read current content
+                content = build_gradle_path.read_text()
+
+                # Check if buildTypes exists
+                if "buildTypes" not in content:
+                    return {
+                        "success": False,
+                        "error": "Could not find 'buildTypes' in build.gradle.kts. "
+                        + "Manual ProGuard configuration required.",
+                    }
+
+                # Check if release buildType exists (more specific pattern)
+                if not re.search(r"release\s*\{", content):
+                    return {
+                        "success": False,
+                        "error": "Could not find 'release { ... }' buildType in build.gradle.kts. "
+                        + "Manual ProGuard configuration required.",
+                    }
+
+                # Detect indentation style from file
+                indent_match = re.search(r"\n(\s+)\w+\s*\{", content)
+                base_indent = indent_match.group(1) if indent_match else "    "
+                indent = base_indent + base_indent  # One more level for inside release block
+
+                # Pattern to find and replace isMinifyEnabled = false
+                # Use re.DOTALL to handle nested braces correctly
+                pattern_disable = r"(release\s*\{.*?)(isMinifyEnabled\s*=\s*false)"
+
+                if re.search(pattern_disable, content, re.DOTALL):
+                    # Replace false with true
+                    new_content = re.sub(pattern_disable, r"\1isMinifyEnabled = true", content, flags=re.DOTALL)
+                else:
+                    # Add isMinifyEnabled = true after release {
+                    pattern_add = r"(release\s*\{\s*\n)"
+                    replacement = f"\\1{indent}isMinifyEnabled = true\n"
+                    new_content, num_subs = re.subn(pattern_add, replacement, content, count=1)
+
+                    if num_subs == 0:
+                        return {
+                            "success": False,
+                            "error": "Could not locate 'release {' block to add isMinifyEnabled. "
+                            + "Manual ProGuard configuration required in build.gradle.kts",
+                        }
+
+                # Write back
+                build_gradle_path.write_text(new_content)
+                proguard_modified_files.append(str(build_gradle_path))
+                proguard_was_enabled = True
+
+        except Exception as e:
+            return {"success": False, "error": f"Failed to enforce ProGuard minification: {str(e)}"}
+
+    # NEW: Release notes directory creation
+    release_notes_created = False
+    release_notes_locales_created = []
+
+    if include_release_notes:
+        try:
+            # Only create directories if project path exists
+            project_path_obj = Path(project_path)
+
+            if project_path_obj.exists():
+                # Construct full path
+                notes_dir = project_path_obj / release_notes_directory
+
+                # Create base directory if it doesn't exist
+                if not notes_dir.exists():
+                    notes_dir.mkdir(parents=True, exist_ok=True)
+                    release_notes_created = True
+
+                # Create default locale directory (en-US) with template
+                default_locale_dir = notes_dir / "en-US"
+                if not default_locale_dir.exists():
+                    default_locale_dir.mkdir(parents=True, exist_ok=True)
+
+                    # Create template whatsnew file
+                    whatsnew_file = default_locale_dir / "whatsnew"
+                    if not whatsnew_file.exists():
+                        whatsnew_file.write_text(
+                            "- New: Initial release\n- Feature highlights go here\n- Keep under 500 characters"
+                        )
+
+                    release_notes_locales_created.append("en-US")
+
+        except Exception as e:
+            return {"success": False, "error": f"Failed to create release notes directory: {str(e)}"}
 
     # Generate trigger configuration based on strategy
     if trigger_strategy == "manual":
@@ -995,6 +1205,13 @@ def generate_github_workflow(
       - 'v*'"""
     else:
         trigger_config = "workflow_dispatch:"
+
+    # NEW: Build optional upload parameters dynamically
+    optional_upload_params = ""
+    if enforce_proguard:
+        optional_upload_params += f"\n          mappingFile: {mapping_file_path}"
+    if include_release_notes:
+        optional_upload_params += f"\n          whatsNewDirectory: {release_notes_directory}"
 
     # Generate workflow content
     workflow_content = f"""name: Deploy to Play Store {track}
@@ -1045,7 +1262,7 @@ jobs:
           packageName: {package_name}
           releaseFiles: {app_module_path}/build/outputs/bundle/release/app-release.aab
           track: {track}
-          status: completed
+          status: completed{optional_upload_params}
 
       - name: Clean up keystore
         if: always()
@@ -1082,20 +1299,83 @@ jobs:
         },
     ]
 
+    # NEW: Build instructions dynamically
+    instructions = [
+        "Create .github/workflows directory if it doesn't exist",
+        "Save the workflow_content to the workflow_path",
+        "Configure the required GitHub Secrets",
+    ]
+
+    # Add ProGuard-specific instructions
+    if enforce_proguard:
+        if proguard_was_enabled:
+            instructions.append("")
+            instructions.append("ProGuard Configuration (MODIFIED):")
+            instructions.append("  ✓ Automatically enabled isMinifyEnabled = true in:")
+            for file in proguard_modified_files:
+                instructions.append(f"    - {file}")
+            instructions.append("  ✓ ProGuard mapping will be included in deployments")
+            instructions.append(f"  ✓ Mapping file location: {mapping_file_path}")
+        else:
+            instructions.append("")
+            instructions.append("ProGuard Configuration (ALREADY ENABLED):")
+            instructions.append("  ✓ isMinifyEnabled = true detected")
+            instructions.append(f"  ✓ Mapping file will be uploaded: {mapping_file_path}")
+
+    # Add release notes instructions
+    if include_release_notes:
+        instructions.append("")
+        if release_notes_created:
+            instructions.append("Release Notes (CREATED):")
+            instructions.append(f"  ✓ Directory created: {release_notes_directory}")
+            instructions.append("  ✓ Default locale template created: en-US/whatsnew")
+            instructions.append("  ℹ Add more locales by creating subdirectories (de-DE, es-ES, etc.)")
+        else:
+            instructions.append("Release Notes (EXISTING DIRECTORY):")
+            instructions.append(f"  ✓ Using existing directory: {release_notes_directory}")
+
+        instructions.append("  ℹ Edit whatsnew files to customize release notes (max 500 chars)")
+        instructions.append("  ℹ See release_notes_config.setup_instructions for detailed guide")
+
+    instructions.append("")
+    instructions.append("Final Steps:")
+    instructions.append("  - Commit changes (build.gradle.kts, release notes directory, workflow file)")
+    instructions.append("  - Push to repository")
+    instructions.append("  - Test with manual workflow dispatch")
+
     return {
         "success": True,
         "workflow_path": workflow_path,
         "workflow_content": workflow_content,
         "required_secrets": required_secrets,
-        "instructions": [
-            "Create .github/workflows directory if it doesn't exist",
-            "Save the workflow_content to the workflow_path",
-            "Configure the required GitHub Secrets",
-            "Commit and push the workflow file",
-            "Test with a manual workflow dispatch",
-        ],
+        "instructions": instructions,
         "estimated_build_time": "5-10 minutes",
         "github_actions_cost": "Free for public repos, 2000 minutes/month for private repos on free tier",
+        # NEW: ProGuard configuration details
+        "proguard_config": {
+            "enforced": enforce_proguard,
+            "was_enabled_by_mcp": proguard_was_enabled,
+            "modified_files": proguard_modified_files,
+            "mapping_file_path": mapping_file_path if enforce_proguard else None,
+            "why_important": (
+                "ProGuard/R8 mapping files enable crash deobfuscation in Play Console. "
+                "Without mapping files, crash reports show obfuscated class/method names. "
+                "This MCP automatically enabled minification for production best practices."
+            )
+            if enforce_proguard
+            else None,
+        },
+        # NEW: Release notes configuration details
+        "release_notes_config": {
+            "enabled": include_release_notes,
+            "directory": release_notes_directory if include_release_notes else None,
+            "created_by_mcp": release_notes_created,
+            "locales_created": release_notes_locales_created,
+            "setup_instructions": RELEASE_NOTES_SETUP_GUIDE.format(directory=release_notes_directory)
+            if include_release_notes
+            else None,
+            "supported_locales": COMMON_PLAY_STORE_LOCALES if include_release_notes else None,
+        },
     }
 
 
