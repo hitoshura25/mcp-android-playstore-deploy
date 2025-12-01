@@ -686,24 +686,24 @@ def generate_signing_config(project_path: str, env_var_prefix: str = "APP_") -> 
 
     # Generate prefixed variable names
     var_names = {
-        'STORE_PATH': f'{env_var_prefix}SIGNING_KEY_STORE_PATH',
-        'STORE_PASSWORD': f'{env_var_prefix}SIGNING_STORE_PASSWORD',
-        'KEY_ALIAS': f'{env_var_prefix}SIGNING_KEY_ALIAS',
-        'KEY_PASSWORD': f'{env_var_prefix}SIGNING_KEY_PASSWORD',
+        "STORE_PATH": f"{env_var_prefix}SIGNING_KEY_STORE_PATH",
+        "STORE_PASSWORD": f"{env_var_prefix}SIGNING_STORE_PASSWORD",
+        "KEY_ALIAS": f"{env_var_prefix}SIGNING_KEY_ALIAS",
+        "KEY_PASSWORD": f"{env_var_prefix}SIGNING_KEY_PASSWORD",
     }
 
     # Generate Kotlin DSL with dual-source support (env vars + gradle.properties)
     gradle_config_kotlin = f"""signingConfigs {{
     create("release") {{
         // Priority: environment variables (CI/CD) > gradle.properties (local dev)
-        val keystorePath = System.getenv("{var_names['STORE_PATH']}")
-            ?: project.findProperty("{var_names['STORE_PATH']}")?.toString()
-        val storePass = System.getenv("{var_names['STORE_PASSWORD']}")
-            ?: project.findProperty("{var_names['STORE_PASSWORD']}")?.toString()
-        val alias = System.getenv("{var_names['KEY_ALIAS']}")
-            ?: project.findProperty("{var_names['KEY_ALIAS']}")?.toString()
-        val keyPass = System.getenv("{var_names['KEY_PASSWORD']}")
-            ?: project.findProperty("{var_names['KEY_PASSWORD']}")?.toString()
+        val keystorePath = System.getenv("{var_names["STORE_PATH"]}")
+            ?: project.findProperty("{var_names["STORE_PATH"]}")?.toString()
+        val storePass = System.getenv("{var_names["STORE_PASSWORD"]}")
+            ?: project.findProperty("{var_names["STORE_PASSWORD"]}")?.toString()
+        val alias = System.getenv("{var_names["KEY_ALIAS"]}")
+            ?: project.findProperty("{var_names["KEY_ALIAS"]}")?.toString()
+        val keyPass = System.getenv("{var_names["KEY_PASSWORD"]}")
+            ?: project.findProperty("{var_names["KEY_PASSWORD"]}")?.toString()
 
         if (keystorePath != null && storePass != null && alias != null && keyPass != null) {{
             storeFile = file(keystorePath)
@@ -736,16 +736,16 @@ tasks.matching {{ it.name.contains("Release") }}.configureEach {{
                 Release signing not configured!
 
                 For CI/CD: Set environment variables:
-                  - {var_names['STORE_PATH']}
-                  - {var_names['STORE_PASSWORD']}
-                  - {var_names['KEY_ALIAS']}
-                  - {var_names['KEY_PASSWORD']}
+                  - {var_names["STORE_PATH"]}
+                  - {var_names["STORE_PASSWORD"]}
+                  - {var_names["KEY_ALIAS"]}
+                  - {var_names["KEY_PASSWORD"]}
 
                 For local development: Create gradle.properties with:
-                  {var_names['STORE_PATH']}=/path/to/release-keystore.jks
-                  {var_names['STORE_PASSWORD']}=your-password
-                  {var_names['KEY_ALIAS']}=upload
-                  {var_names['KEY_PASSWORD']}=your-password
+                  {var_names["STORE_PATH"]}=/path/to/release-keystore.jks
+                  {var_names["STORE_PASSWORD"]}=your-password
+                  {var_names["KEY_ALIAS"]}=upload
+                  {var_names["KEY_PASSWORD"]}=your-password
 
                 See gradle.properties.template for template.
                 ""${{'"'}}.trimIndent()
@@ -759,10 +759,10 @@ tasks.matching {{ it.name.contains("Release") }}.configureEach {{
     signingConfigs {{
         release {{
             // Priority: environment variables (CI/CD) > gradle.properties (local dev)
-            def keystorePath = System.getenv('{var_names['STORE_PATH']}') ?: project.findProperty('{var_names['STORE_PATH']}')
-            def storePass = System.getenv('{var_names['STORE_PASSWORD']}') ?: project.findProperty('{var_names['STORE_PASSWORD']}')
-            def alias = System.getenv('{var_names['KEY_ALIAS']}') ?: project.findProperty('{var_names['KEY_ALIAS']}')
-            def keyPass = System.getenv('{var_names['KEY_PASSWORD']}') ?: project.findProperty('{var_names['KEY_PASSWORD']}')
+            def keystorePath = System.getenv('{var_names["STORE_PATH"]}') ?: project.findProperty('{var_names["STORE_PATH"]}')
+            def storePass = System.getenv('{var_names["STORE_PASSWORD"]}') ?: project.findProperty('{var_names["STORE_PASSWORD"]}')
+            def alias = System.getenv('{var_names["KEY_ALIAS"]}') ?: project.findProperty('{var_names["KEY_ALIAS"]}')
+            def keyPass = System.getenv('{var_names["KEY_PASSWORD"]}') ?: project.findProperty('{var_names["KEY_PASSWORD"]}')
 
             if (keystorePath && storePass && alias && keyPass) {{
                 storeFile file(keystorePath)
@@ -791,16 +791,16 @@ tasks.matching {{ it.name.contains('Release') }}.configureEach {{
                 Release signing not configured!
 
                 For CI/CD: Set environment variables:
-                  - {var_names['STORE_PATH']}
-                  - {var_names['STORE_PASSWORD']}
-                  - {var_names['KEY_ALIAS']}
-                  - {var_names['KEY_PASSWORD']}
+                  - {var_names["STORE_PATH"]}
+                  - {var_names["STORE_PASSWORD"]}
+                  - {var_names["KEY_ALIAS"]}
+                  - {var_names["KEY_PASSWORD"]}
 
                 For local development: Create gradle.properties with:
-                  {var_names['STORE_PATH']}=/path/to/release-keystore.jks
-                  {var_names['STORE_PASSWORD']}=your-password
-                  {var_names['KEY_ALIAS']}=upload
-                  {var_names['KEY_PASSWORD']}=your-password
+                  {var_names["STORE_PATH"]}=/path/to/release-keystore.jks
+                  {var_names["STORE_PASSWORD"]}=your-password
+                  {var_names["KEY_ALIAS"]}=upload
+                  {var_names["KEY_PASSWORD"]}=your-password
 
                 See gradle.properties.template for template.
             '''.stripIndent())
@@ -817,16 +817,16 @@ tasks.matching {{ it.name.contains('Release') }}.configureEach {{
 # CI/CD will use environment variables instead.
 
 # Path to your local keystore file (use absolute path)
-{var_names['STORE_PATH']}=/absolute/path/to/release-keystore.jks
+{var_names["STORE_PATH"]}=/absolute/path/to/release-keystore.jks
 
 # Keystore password
-{var_names['STORE_PASSWORD']}=your-store-password
+{var_names["STORE_PASSWORD"]}=your-store-password
 
 # Key alias (usually "upload" for Play Store)
-{var_names['KEY_ALIAS']}=upload
+{var_names["KEY_ALIAS"]}=upload
 
 # Key password
-{var_names['KEY_PASSWORD']}=your-key-password
+{var_names["KEY_PASSWORD"]}=your-key-password
 """
 
     # Complete example with dual-source config
@@ -850,14 +850,14 @@ android {{
     signingConfigs {{
         create("release") {{
             // Priority: environment variables (CI/CD) > gradle.properties (local dev)
-            val keystorePath = System.getenv("{var_names['STORE_PATH']}")
-                ?: project.findProperty("{var_names['STORE_PATH']}")?.toString()
-            val storePass = System.getenv("{var_names['STORE_PASSWORD']}")
-                ?: project.findProperty("{var_names['STORE_PASSWORD']}")?.toString()
-            val alias = System.getenv("{var_names['KEY_ALIAS']}")
-                ?: project.findProperty("{var_names['KEY_ALIAS']}")?.toString()
-            val keyPass = System.getenv("{var_names['KEY_PASSWORD']}")
-                ?: project.findProperty("{var_names['KEY_PASSWORD']}")?.toString()
+            val keystorePath = System.getenv("{var_names["STORE_PATH"]}")
+                ?: project.findProperty("{var_names["STORE_PATH"]}")?.toString()
+            val storePass = System.getenv("{var_names["STORE_PASSWORD"]}")
+                ?: project.findProperty("{var_names["STORE_PASSWORD"]}")?.toString()
+            val alias = System.getenv("{var_names["KEY_ALIAS"]}")
+                ?: project.findProperty("{var_names["KEY_ALIAS"]}")?.toString()
+            val keyPass = System.getenv("{var_names["KEY_PASSWORD"]}")
+                ?: project.findProperty("{var_names["KEY_PASSWORD"]}")?.toString()
 
             if (keystorePath != null && storePass != null && alias != null && keyPass != null) {{
                 storeFile = file(keystorePath)
@@ -900,16 +900,16 @@ tasks.matching {{ it.name.contains("Release") }}.configureEach {{
                 Release signing not configured!
 
                 For CI/CD: Set environment variables:
-                  - {var_names['STORE_PATH']}
-                  - {var_names['STORE_PASSWORD']}
-                  - {var_names['KEY_ALIAS']}
-                  - {var_names['KEY_PASSWORD']}
+                  - {var_names["STORE_PATH"]}
+                  - {var_names["STORE_PASSWORD"]}
+                  - {var_names["KEY_ALIAS"]}
+                  - {var_names["KEY_PASSWORD"]}
 
                 For local development: Create gradle.properties with:
-                  {var_names['STORE_PATH']}=/path/to/release-keystore.jks
-                  {var_names['STORE_PASSWORD']}=your-password
-                  {var_names['KEY_ALIAS']}=upload
-                  {var_names['KEY_PASSWORD']}=your-password
+                  {var_names["STORE_PATH"]}=/path/to/release-keystore.jks
+                  {var_names["STORE_PASSWORD"]}=your-password
+                  {var_names["KEY_ALIAS"]}=upload
+                  {var_names["KEY_PASSWORD"]}=your-password
 
                 See gradle.properties.template for template.
                 ""${{'"'}}.trimIndent()
@@ -934,10 +934,10 @@ tasks.matching {{ it.name.contains("Release") }}.configureEach {{
             "Verify gradle.properties is in .gitignore",
         ],
         "required_env_vars": [
-            var_names['STORE_PATH'],
-            var_names['STORE_PASSWORD'],
-            var_names['KEY_ALIAS'],
-            var_names['KEY_PASSWORD'],
+            var_names["STORE_PATH"],
+            var_names["STORE_PASSWORD"],
+            var_names["KEY_ALIAS"],
+            var_names["KEY_PASSWORD"],
         ],
         "complete_example": complete_example,
     }
@@ -1183,11 +1183,11 @@ def generate_github_workflow(
 
     # Generate prefixed variable names for signing configuration
     var_names = {
-        'STORE_PATH': f'{env_var_prefix}SIGNING_KEY_STORE_PATH',
-        'STORE_PASSWORD': f'{env_var_prefix}SIGNING_STORE_PASSWORD',
-        'KEY_ALIAS': f'{env_var_prefix}SIGNING_KEY_ALIAS',
-        'KEY_PASSWORD': f'{env_var_prefix}SIGNING_KEY_PASSWORD',
-        'KEYSTORE_BASE64': f'{env_var_prefix}SIGNING_KEY_STORE_BASE64',
+        "STORE_PATH": f"{env_var_prefix}SIGNING_KEY_STORE_PATH",
+        "STORE_PASSWORD": f"{env_var_prefix}SIGNING_STORE_PASSWORD",
+        "KEY_ALIAS": f"{env_var_prefix}SIGNING_KEY_ALIAS",
+        "KEY_PASSWORD": f"{env_var_prefix}SIGNING_KEY_PASSWORD",
+        "KEYSTORE_BASE64": f"{env_var_prefix}SIGNING_KEY_STORE_BASE64",
     }
 
     # Validate inputs (Issues #2, #7)
@@ -1415,16 +1415,16 @@ jobs:
 
       - name: Decode Keystore
         run: |
-          echo "${{{{ secrets.{var_names['KEYSTORE_BASE64']} }}}}" | base64 --decode > ${{{{ github.workspace }}}}/release.jks
+          echo "${{{{ secrets.{var_names["KEYSTORE_BASE64"]} }}}}" | base64 --decode > ${{{{ github.workspace }}}}/release.jks
           chmod 600 ${{{{ github.workspace }}}}/release.jks
 
       - name: Build Release AAB
         run: ./gradlew bundleRelease
         env:
-          {var_names['KEY_ALIAS']}: ${{{{ secrets.{var_names['KEY_ALIAS']} }}}}
-          {var_names['KEY_PASSWORD']}: ${{{{ secrets.{var_names['KEY_PASSWORD']} }}}}
-          {var_names['STORE_PASSWORD']}: ${{{{ secrets.{var_names['STORE_PASSWORD']} }}}}
-          {var_names['STORE_PATH']}: ${{{{ github.workspace }}}}/release.jks
+          {var_names["KEY_ALIAS"]}: ${{{{ secrets.{var_names["KEY_ALIAS"]} }}}}
+          {var_names["KEY_PASSWORD"]}: ${{{{ secrets.{var_names["KEY_PASSWORD"]} }}}}
+          {var_names["STORE_PASSWORD"]}: ${{{{ secrets.{var_names["STORE_PASSWORD"]} }}}}
+          {var_names["STORE_PATH"]}: ${{{{ github.workspace }}}}/release.jks
 
       # Note (Issue #16): This uses r0adkll/upload-google-play, a community-maintained action.
       # For production, consider official alternatives or pin to a specific commit SHA.
@@ -1451,22 +1451,22 @@ jobs:
             "how_to_generate": "Download from Google Cloud Console when creating service account key",
         },
         {
-            "name": var_names['KEYSTORE_BASE64'],
+            "name": var_names["KEYSTORE_BASE64"],
             "description": "Base64-encoded keystore file",
             "how_to_generate": "Run: base64 -w 0 your-keystore.jks",
         },
         {
-            "name": var_names['KEY_ALIAS'],
+            "name": var_names["KEY_ALIAS"],
             "description": "The alias of your signing key",
             "how_to_generate": "This is what you specified when creating the keystore",
         },
         {
-            "name": var_names['KEY_PASSWORD'],
+            "name": var_names["KEY_PASSWORD"],
             "description": "Password for your signing key",
             "how_to_generate": "This is what you specified when creating the keystore",
         },
         {
-            "name": var_names['STORE_PASSWORD'],
+            "name": var_names["STORE_PASSWORD"],
             "description": "Password for your keystore",
             "how_to_generate": "This is what you specified when creating the keystore",
         },

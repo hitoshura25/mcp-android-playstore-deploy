@@ -73,16 +73,21 @@ def test_generate_signing_config_priority_order():
     kotlin_config = result["gradle_config_kotlin"]
 
     # Define the 4 signing config variables we expect (now with APP_ prefix)
-    config_vars = ["APP_SIGNING_KEY_STORE_PATH", "APP_SIGNING_STORE_PASSWORD", "APP_SIGNING_KEY_ALIAS", "APP_SIGNING_KEY_PASSWORD"]
+    config_vars = [
+        "APP_SIGNING_KEY_STORE_PATH",
+        "APP_SIGNING_STORE_PASSWORD",
+        "APP_SIGNING_KEY_ALIAS",
+        "APP_SIGNING_KEY_PASSWORD",
+    ]
 
     # Verify each variable has correct priority order in its elvis operator line
     for var in config_vars:
         # Find the line containing both patterns for this variable
-        for line in kotlin_config.split('\n'):
+        for line in kotlin_config.split("\n"):
             if f'System.getenv("{var}")' in line and f'project.findProperty("{var}")' in line:
                 # Verify env var comes before property in this specific line
-                env_pos = line.find('System.getenv')
-                prop_pos = line.find('project.findProperty')
+                env_pos = line.find("System.getenv")
+                prop_pos = line.find("project.findProperty")
                 assert env_pos < prop_pos, f"Priority order incorrect for {var} in line: {line.strip()}"
                 break
 
