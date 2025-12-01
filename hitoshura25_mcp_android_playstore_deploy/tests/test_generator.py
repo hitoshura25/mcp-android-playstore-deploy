@@ -70,12 +70,21 @@ def test_generate_signing_config_gradle_properties_template():
 def test_generate_signing_config_priority_order():
     """Test that environment variables have priority over gradle.properties"""
     result = generate_signing_config(project_path="/fake/path")
-
-    # Check that env vars are checked first in the elvis operator
     kotlin_config = result["gradle_config_kotlin"]
-    env_index = kotlin_config.index("System.getenv")
-    prop_index = kotlin_config.index("project.findProperty")
-    assert env_index < prop_index
+
+    # Define the 4 signing config variables we expect
+    config_vars = ["SIGNING_KEY_STORE_PATH", "SIGNING_STORE_PASSWORD", "SIGNING_KEY_ALIAS", "SIGNING_KEY_PASSWORD"]
+
+    # Verify each variable has correct priority order in its elvis operator line
+    for var in config_vars:
+        # Find the line containing both patterns for this variable
+        for line in kotlin_config.split('\n'):
+            if f'System.getenv("{var}")' in line and f'project.findProperty("{var}")' in line:
+                # Verify env var comes before property in this specific line
+                env_pos = line.find('System.getenv')
+                prop_pos = line.find('project.findProperty')
+                assert env_pos < prop_pos, f"Priority order incorrect for {var} in line: {line.strip()}"
+                break
 
 
 def test_create_github_secrets_guide():
