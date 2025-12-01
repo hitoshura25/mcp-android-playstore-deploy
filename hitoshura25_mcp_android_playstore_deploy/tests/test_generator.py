@@ -42,8 +42,8 @@ def test_generate_signing_config():
     assert "tasks.matching" in result["gradle_config_kotlin"]
     assert 'it.name.contains("Release")' in result["gradle_config_kotlin"]
 
-    # Check template content
-    assert "SIGNING_KEY_STORE_PATH" in result["gradle_properties_template"]
+    # Check template content (now with APP_ prefix)
+    assert "APP_SIGNING_KEY_STORE_PATH" in result["gradle_properties_template"]
     assert "gradle.properties" in result["gitignore_entries"]
 
 
@@ -60,10 +60,10 @@ def test_generate_signing_config_gradle_properties_template():
     result = generate_signing_config(project_path="/fake/path")
 
     template = result["gradle_properties_template"]
-    assert "SIGNING_KEY_STORE_PATH=" in template
-    assert "SIGNING_STORE_PASSWORD=" in template
-    assert "SIGNING_KEY_ALIAS=" in template
-    assert "SIGNING_KEY_PASSWORD=" in template
+    assert "APP_SIGNING_KEY_STORE_PATH=" in template
+    assert "APP_SIGNING_STORE_PASSWORD=" in template
+    assert "APP_SIGNING_KEY_ALIAS=" in template
+    assert "APP_SIGNING_KEY_PASSWORD=" in template
     assert "Never commit gradle.properties" in template
 
 
@@ -72,8 +72,8 @@ def test_generate_signing_config_priority_order():
     result = generate_signing_config(project_path="/fake/path")
     kotlin_config = result["gradle_config_kotlin"]
 
-    # Define the 4 signing config variables we expect
-    config_vars = ["SIGNING_KEY_STORE_PATH", "SIGNING_STORE_PASSWORD", "SIGNING_KEY_ALIAS", "SIGNING_KEY_PASSWORD"]
+    # Define the 4 signing config variables we expect (now with APP_ prefix)
+    config_vars = ["APP_SIGNING_KEY_STORE_PATH", "APP_SIGNING_STORE_PASSWORD", "APP_SIGNING_KEY_ALIAS", "APP_SIGNING_KEY_PASSWORD"]
 
     # Verify each variable has correct priority order in its elvis operator line
     for var in config_vars:
@@ -85,6 +85,43 @@ def test_generate_signing_config_priority_order():
                 prop_pos = line.find('project.findProperty')
                 assert env_pos < prop_pos, f"Priority order incorrect for {var} in line: {line.strip()}"
                 break
+
+
+def test_generate_signing_config_custom_prefix():
+    """Test that custom prefix works correctly"""
+    result = generate_signing_config(project_path="/fake/path", env_var_prefix="MYAPP_")
+
+    assert result["success"] is True
+    # Check Kotlin config has custom prefix
+    assert "MYAPP_SIGNING_KEY_STORE_PATH" in result["gradle_config_kotlin"]
+    assert "MYAPP_SIGNING_STORE_PASSWORD" in result["gradle_config_kotlin"]
+    assert "MYAPP_SIGNING_KEY_ALIAS" in result["gradle_config_kotlin"]
+    assert "MYAPP_SIGNING_KEY_PASSWORD" in result["gradle_config_kotlin"]
+
+    # Verify in template too
+    assert "MYAPP_SIGNING_KEY_STORE_PATH=" in result["gradle_properties_template"]
+    assert "MYAPP_SIGNING_STORE_PASSWORD=" in result["gradle_properties_template"]
+    assert "MYAPP_SIGNING_KEY_ALIAS=" in result["gradle_properties_template"]
+    assert "MYAPP_SIGNING_KEY_PASSWORD=" in result["gradle_properties_template"]
+
+    # Verify in required_env_vars
+    assert "MYAPP_SIGNING_KEY_STORE_PATH" in result["required_env_vars"]
+
+
+def test_generate_signing_config_no_prefix():
+    """Test that empty prefix works (original behavior)"""
+    result = generate_signing_config(project_path="/fake/path", env_var_prefix="")
+
+    assert result["success"] is True
+    # Original variable names without prefix
+    assert "SIGNING_KEY_STORE_PATH" in result["gradle_config_kotlin"]
+    assert "SIGNING_STORE_PASSWORD" in result["gradle_config_kotlin"]
+    assert "SIGNING_KEY_ALIAS" in result["gradle_config_kotlin"]
+    assert "SIGNING_KEY_PASSWORD" in result["gradle_config_kotlin"]
+
+    # Should not have APP_ prefix
+    assert "APP_SIGNING" not in result["gradle_config_kotlin"]
+    assert "APP_SIGNING" not in result["gradle_properties_template"]
 
 
 def test_create_github_secrets_guide():
