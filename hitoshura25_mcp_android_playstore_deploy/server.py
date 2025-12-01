@@ -85,22 +85,25 @@ async def generate_keystore(
 
 
 @mcp.tool()
-async def generate_signing_config(project_path: str, signing_strategy: str = None) -> str:
-    """Generate Gradle signing configuration code to add to build.gradle.kts
+async def generate_signing_config(project_path: str) -> str:
+    """Generate Gradle signing configuration with dual-source support
 
+    Generates signing configuration that works seamlessly for both local development and CI/CD:
+    - Environment variables (prioritized for CI/CD)
+    - gradle.properties fallback (for local development)
+    - Task-based validation (debug builds always work)
+
+    Automatically generates gradle.properties.template for easy local setup.
 
     Args:
 
         project_path: Path to Android project
 
-        signing_strategy: How to provide signing credentials (environment_variables or gradle_properties)
-
-
 
     Returns:
-        Result from generate_signing_config
+        Result including gradle_config_kotlin, gradle_properties_template, and setup instructions
     """
-    result = generator.generate_signing_config(project_path=project_path, signing_strategy=signing_strategy)
+    result = generator.generate_signing_config(project_path=project_path)
     # Handle both sync and async business logic
     if inspect.isawaitable(result):
         result = await result

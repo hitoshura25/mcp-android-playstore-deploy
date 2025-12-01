@@ -25,14 +25,57 @@ def test_setup_service_account_guide():
 
 
 def test_generate_signing_config():
-    """Test that generate_signing_config generates proper Gradle config"""
-    result = generate_signing_config(project_path="/fake/path", signing_strategy="environment_variables")
+    """Test that generate_signing_config generates proper Gradle config with dual-source support"""
+    result = generate_signing_config(project_path="/fake/path")
 
     assert result["success"] is True
     assert "gradle_config_kotlin" in result
     assert "gradle_config_groovy" in result
-    assert "signingConfigs" in result["gradle_config_kotlin"]
-    assert "SIGNING_KEY_STORE_PATH" in result["gradle_config_kotlin"]
+    assert "gradle_properties_template" in result
+    assert "gitignore_entries" in result
+
+    # Check for dual-source pattern in Kotlin config
+    assert "project.findProperty" in result["gradle_config_kotlin"]
+    assert "System.getenv" in result["gradle_config_kotlin"]
+
+    # Check for task-based validation
+    assert "tasks.matching" in result["gradle_config_kotlin"]
+    assert 'it.name.contains("Release")' in result["gradle_config_kotlin"]
+
+    # Check template content
+    assert "SIGNING_KEY_STORE_PATH" in result["gradle_properties_template"]
+    assert "gradle.properties" in result["gitignore_entries"]
+
+
+def test_generate_signing_config_includes_validation():
+    """Test that task-based validation is included"""
+    result = generate_signing_config(project_path="/fake/path")
+
+    assert "GradleException" in result["gradle_config_kotlin"]
+    assert "Release signing not configured!" in result["gradle_config_kotlin"]
+
+
+def test_generate_signing_config_gradle_properties_template():
+    """Test gradle.properties.template generation"""
+    result = generate_signing_config(project_path="/fake/path")
+
+    template = result["gradle_properties_template"]
+    assert "SIGNING_KEY_STORE_PATH=" in template
+    assert "SIGNING_STORE_PASSWORD=" in template
+    assert "SIGNING_KEY_ALIAS=" in template
+    assert "SIGNING_KEY_PASSWORD=" in template
+    assert "Never commit gradle.properties" in template
+
+
+def test_generate_signing_config_priority_order():
+    """Test that environment variables have priority over gradle.properties"""
+    result = generate_signing_config(project_path="/fake/path")
+
+    # Check that env vars are checked first in the elvis operator
+    kotlin_config = result["gradle_config_kotlin"]
+    env_index = kotlin_config.index("System.getenv")
+    prop_index = kotlin_config.index("project.findProperty")
+    assert env_index < prop_index
 
 
 def test_create_github_secrets_guide():

@@ -20,7 +20,6 @@ from .security_utils import (
     redact_sensitive_data,
     create_secure_temp_file,
     validate_track,
-    validate_signing_strategy,
     validate_android_package_name,
 )
 
@@ -599,19 +598,42 @@ def generate_keystore(
                 pass
 
 
-def generate_signing_config(project_path: str, signing_strategy: str = None) -> Dict[str, Any]:
+def generate_signing_config(project_path: str) -> Dict[str, Any]:
     r"""
-    Generate Gradle signing configuration code to add to build.gradle.kts
+    Generate Gradle signing configuration with dual-source support for seamless local development and CI/CD.
+
+    Generated configuration:
+    - Checks environment variables first (CI/CD priority)
+    - Falls back to gradle.properties (local development)
+    - Validates only when building release (task-based validation)
+    - Provides clear error messages with setup instructions
+
+    This ensures:
+    - Debug builds work immediately without any setup
+    - Release builds require signing config (validates on task execution)
+    - Developers can use gradle.properties for local testing
+    - CI/CD pipelines use environment variables (prioritized)
 
     Args:
 
         project_path: Path to Android project
 
-        signing_strategy: How to provide signing credentials (environment_variables or gradle_properties)
-
 
     Returns:
-        Result dictionary
+        Result dictionary containing:
+        - gradle_config_kotlin: Kotlin DSL configuration
+        - gradle_config_groovy: Groovy DSL configuration
+        - gradle_properties_template: Template for local development
+        - gitignore_entries: Files to add to .gitignore
+        - instructions: Setup steps
+        - required_env_vars: List of required environment variables
+        - complete_example: Full build.gradle.kts example
+
+    Example:
+        >>> result = generate_signing_config("/path/to/project")
+        >>> print(result["gradle_config_kotlin"])
+        >>> # Write gradle.properties.template to project root
+        >>> # Add gradle_config_kotlin to build.gradle.kts
 
     Security:
         IMPORTANT: Review SECURITY.md before implementing this function.
@@ -652,35 +674,31 @@ def generate_signing_config(project_path: str, signing_strategy: str = None) -> 
 
                 return {'success': True, 'data': data}
     """
-    # Default strategy is environment_variables
-    if signing_strategy is None:
-        signing_strategy = "environment_variables"
-
-    # Validate signing_strategy (Issue #1)
-    try:
-        signing_strategy = validate_signing_strategy(signing_strategy)
-    except ValueError as e:
-        return {"success": False, "error": str(e)}
-
     # Validate project_path (Issue #7) - doesn't need to exist for generating config
     try:
         validate_project_path(project_path, must_exist=False)
     except ValueError as e:
         return {"success": False, "error": f"Invalid project path: {e}"}
 
-    # NOTE (Issue #39): Currently only 'environment_variables' strategy is implemented.
-    # The signing_strategy parameter is validated above for future use.
-    # TODO: Implement 'gradle_properties' strategy that reads from gradle.properties file
-    # instead of environment variables. When implemented, use the signing_strategy value
-    # to determine which config template to generate.
-
-    # Generate Kotlin DSL (using environment_variables strategy)
+    # Generate Kotlin DSL with dual-source support (env vars + gradle.properties)
     gradle_config_kotlin = """signingConfigs {
     create("release") {
-        storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
-        storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-        keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-        keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+        // Priority: environment variables (CI/CD) > gradle.properties (local dev)
+        val keystorePath = System.getenv("SIGNING_KEY_STORE_PATH")
+            ?: project.findProperty("SIGNING_KEY_STORE_PATH")?.toString()
+        val storePass = System.getenv("SIGNING_STORE_PASSWORD")
+            ?: project.findProperty("SIGNING_STORE_PASSWORD")?.toString()
+        val alias = System.getenv("SIGNING_KEY_ALIAS")
+            ?: project.findProperty("SIGNING_KEY_ALIAS")?.toString()
+        val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
+            ?: project.findProperty("SIGNING_KEY_PASSWORD")?.toString()
+
+        if (keystorePath != null && storePass != null && alias != null && keyPass != null) {
+            storeFile = file(keystorePath)
+            storePassword = storePass
+            keyAlias = alias
+            keyPassword = keyPass
+        }
     }
 }
 
@@ -694,28 +712,112 @@ buildTypes {
             "proguard-rules.pro"
         )
     }
+}
+
+// Validate signing config only when building release variants
+tasks.matching { it.name.contains("Release") }.configureEach {
+    doFirst {
+        val releaseConfig = android.signingConfigs.getByName("release")
+        if (releaseConfig.storeFile == null) {
+            throw GradleException(
+                ""${'"'}
+                Release signing not configured!
+
+                For CI/CD: Set environment variables:
+                  - SIGNING_KEY_STORE_PATH
+                  - SIGNING_STORE_PASSWORD
+                  - SIGNING_KEY_ALIAS
+                  - SIGNING_KEY_PASSWORD
+
+                For local development: Create gradle.properties with:
+                  SIGNING_KEY_STORE_PATH=/path/to/release-keystore.jks
+                  SIGNING_STORE_PASSWORD=your-password
+                  SIGNING_KEY_ALIAS=upload
+                  SIGNING_KEY_PASSWORD=your-password
+
+                See gradle.properties.template for template.
+                ""${'"'}.trimIndent()
+            )
+        }
+    }
 }"""
 
-    # Generate Groovy DSL
-    gradle_config_groovy = """signingConfigs {
-    release {
-        storeFile file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
-        storePassword System.getenv("SIGNING_STORE_PASSWORD")
-        keyAlias System.getenv("SIGNING_KEY_ALIAS")
-        keyPassword System.getenv("SIGNING_KEY_PASSWORD")
+    # Generate Groovy DSL with dual-source support
+    gradle_config_groovy = """android {
+    signingConfigs {
+        release {
+            // Priority: environment variables (CI/CD) > gradle.properties (local dev)
+            def keystorePath = System.getenv('SIGNING_KEY_STORE_PATH') ?: project.findProperty('SIGNING_KEY_STORE_PATH')
+            def storePass = System.getenv('SIGNING_STORE_PASSWORD') ?: project.findProperty('SIGNING_STORE_PASSWORD')
+            def alias = System.getenv('SIGNING_KEY_ALIAS') ?: project.findProperty('SIGNING_KEY_ALIAS')
+            def keyPass = System.getenv('SIGNING_KEY_PASSWORD') ?: project.findProperty('SIGNING_KEY_PASSWORD')
+
+            if (keystorePath && storePass && alias && keyPass) {
+                storeFile file(keystorePath)
+                storePassword storePass
+                keyAlias alias
+                keyPassword keyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
     }
 }
 
-buildTypes {
-    release {
-        signingConfig signingConfigs.release
-        minifyEnabled true
-        shrinkResources true
-        proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+// Validate signing config only when building release variants
+tasks.matching { it.name.contains('Release') }.configureEach {
+    doFirst {
+        if (android.signingConfigs.release.storeFile == null) {
+            throw new GradleException('''
+                Release signing not configured!
+
+                For CI/CD: Set environment variables:
+                  - SIGNING_KEY_STORE_PATH
+                  - SIGNING_STORE_PASSWORD
+                  - SIGNING_KEY_ALIAS
+                  - SIGNING_KEY_PASSWORD
+
+                For local development: Create gradle.properties with:
+                  SIGNING_KEY_STORE_PATH=/path/to/release-keystore.jks
+                  SIGNING_STORE_PASSWORD=your-password
+                  SIGNING_KEY_ALIAS=upload
+                  SIGNING_KEY_PASSWORD=your-password
+
+                See gradle.properties.template for template.
+            '''.stripIndent())
+        }
     }
 }"""
 
-    # Complete example
+    # Generate gradle.properties.template for local development
+    gradle_properties_template = """# Local Development Signing Configuration
+#
+# Copy this file to gradle.properties (gitignored) to enable local release builds
+#
+# IMPORTANT: Never commit gradle.properties with real credentials!
+# CI/CD will use environment variables instead.
+
+# Path to your local keystore file (use absolute path)
+SIGNING_KEY_STORE_PATH=/absolute/path/to/release-keystore.jks
+
+# Keystore password
+SIGNING_STORE_PASSWORD=your-store-password
+
+# Key alias (usually "upload" for Play Store)
+SIGNING_KEY_ALIAS=upload
+
+# Key password
+SIGNING_KEY_PASSWORD=your-key-password
+"""
+
+    # Complete example with dual-source config
     complete_example = """plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -735,10 +837,22 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("SIGNING_KEY_STORE_PATH") ?: "release.jks")
-            storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-            keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-            keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            // Priority: environment variables (CI/CD) > gradle.properties (local dev)
+            val keystorePath = System.getenv("SIGNING_KEY_STORE_PATH")
+                ?: project.findProperty("SIGNING_KEY_STORE_PATH")?.toString()
+            val storePass = System.getenv("SIGNING_STORE_PASSWORD")
+                ?: project.findProperty("SIGNING_STORE_PASSWORD")?.toString()
+            val alias = System.getenv("SIGNING_KEY_ALIAS")
+                ?: project.findProperty("SIGNING_KEY_ALIAS")?.toString()
+            val keyPass = System.getenv("SIGNING_KEY_PASSWORD")
+                ?: project.findProperty("SIGNING_KEY_PASSWORD")?.toString()
+
+            if (keystorePath != null && storePass != null && alias != null && keyPass != null) {
+                storeFile = file(keystorePath)
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
+            }
         }
     }
 
@@ -762,17 +876,50 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+// Validate signing config only when building release variants
+tasks.matching { it.name.contains("Release") }.configureEach {
+    doFirst {
+        val releaseConfig = android.signingConfigs.getByName("release")
+        if (releaseConfig.storeFile == null) {
+            throw GradleException(
+                ""${'"'}
+                Release signing not configured!
+
+                For CI/CD: Set environment variables:
+                  - SIGNING_KEY_STORE_PATH
+                  - SIGNING_STORE_PASSWORD
+                  - SIGNING_KEY_ALIAS
+                  - SIGNING_KEY_PASSWORD
+
+                For local development: Create gradle.properties with:
+                  SIGNING_KEY_STORE_PATH=/path/to/release-keystore.jks
+                  SIGNING_STORE_PASSWORD=your-password
+                  SIGNING_KEY_ALIAS=upload
+                  SIGNING_KEY_PASSWORD=your-password
+
+                See gradle.properties.template for template.
+                ""${'"'}.trimIndent()
+            )
+        }
+    }
 }"""
 
     return {
         "success": True,
         "gradle_config_kotlin": gradle_config_kotlin,
         "gradle_config_groovy": gradle_config_groovy,
+        "gradle_properties_template": gradle_properties_template,
+        "gitignore_entries": ["gradle.properties"],
         "insert_location": "Inside android { ... } block, before buildTypes",
         "instructions": [
             "Add the signingConfigs block to your app/build.gradle.kts",
             "Update your release buildType to use the signing config",
-            "Set environment variables in your CI/CD pipeline",
+            "Create gradle.properties.template at project root",
+            "For local development: Copy gradle.properties.template to gradle.properties and fill in values",
+            "For CI/CD: Set environment variables in your pipeline",
+            "Verify gradle.properties is in .gitignore",
         ],
         "required_env_vars": [
             "SIGNING_KEY_STORE_PATH",

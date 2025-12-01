@@ -561,29 +561,6 @@ def validate_track(track: str) -> str:
     return track
 
 
-def validate_signing_strategy(strategy: str) -> str:
-    """
-    Validate signing strategy.
-
-    Args:
-        strategy: Strategy to validate
-
-    Returns:
-        Validated strategy
-
-    Raises:
-        ValueError: If strategy is invalid
-    """
-    valid_strategies = {"environment_variables", "gradle_properties"}
-
-    if strategy not in valid_strategies:
-        raise ValueError(
-            f"Invalid signing strategy '{strategy}'. Must be one of: {', '.join(sorted(valid_strategies))}"
-        )
-
-    return strategy
-
-
 def validate_android_package_name(package_name: str) -> str:
     """
     Validate Android package name format.
