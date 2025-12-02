@@ -85,22 +85,29 @@ async def generate_keystore(
 
 
 @mcp.tool()
-async def generate_signing_config(project_path: str, signing_strategy: str = None) -> str:
-    """Generate Gradle signing configuration code to add to build.gradle.kts
+async def generate_signing_config(project_path: str, env_var_prefix: str = "APP_") -> str:
+    """Generate Gradle signing configuration with dual-source support
 
+    Generates signing configuration that works seamlessly for both local development and CI/CD:
+    - Environment variables (prioritized for CI/CD)
+    - gradle.properties fallback (for local development)
+    - Task-based validation (debug builds always work)
+
+    Automatically generates gradle.properties.template for easy local setup.
 
     Args:
 
         project_path: Path to Android project
 
-        signing_strategy: How to provide signing credentials (environment_variables or gradle_properties)
-
+        env_var_prefix: Prefix for environment variables (default: "APP_")
+                       Example: "APP_" creates APP_SIGNING_KEY_STORE_PATH
+                       Use "" for no prefix
 
 
     Returns:
-        Result from generate_signing_config
+        Result including gradle_config_kotlin, gradle_properties_template, and setup instructions
     """
-    result = generator.generate_signing_config(project_path=project_path, signing_strategy=signing_strategy)
+    result = generator.generate_signing_config(project_path=project_path, env_var_prefix=env_var_prefix)
     # Handle both sync and async business logic
     if inspect.isawaitable(result):
         result = await result
@@ -135,6 +142,7 @@ async def generate_github_workflow(
     mapping_file_path: str = None,
     include_release_notes: bool = True,
     release_notes_directory: str = None,
+    env_var_prefix: str = "APP_",
 ) -> str:
     """Generate a complete GitHub Actions workflow file for Play Store deployment
 
@@ -163,6 +171,10 @@ async def generate_github_workflow(
 
         release_notes_directory: Path to release notes directory (default: distribution/whatsnew)
 
+        env_var_prefix: Prefix for environment variables (default: "APP_")
+                       Example: "APP_" creates APP_SIGNING_KEY_STORE_PATH
+                       Use "" for no prefix
+
 
 
     Returns:
@@ -180,6 +192,7 @@ async def generate_github_workflow(
         mapping_file_path=mapping_file_path,
         include_release_notes=include_release_notes,
         release_notes_directory=release_notes_directory,
+        env_var_prefix=env_var_prefix,
     )
     # Handle both sync and async business logic
     if inspect.isawaitable(result):
