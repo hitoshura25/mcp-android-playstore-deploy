@@ -83,13 +83,14 @@ def test_generate_signing_config_priority_order():
     # Verify each variable has correct priority order in its elvis operator line
     for var in config_vars:
         # Find the line containing both patterns for this variable
+        # (should be the variable declaration line - only one per variable)
         for line in kotlin_config.split("\n"):
             if f'System.getenv("{var}")' in line and f'project.findProperty("{var}")' in line:
                 # Verify env var comes before property in this specific line
                 env_pos = line.find("System.getenv")
                 prop_pos = line.find("project.findProperty")
                 assert env_pos < prop_pos, f"Priority order incorrect for {var} in line: {line.strip()}"
-                break
+                break  # Only one declaration line per variable
 
 
 def test_generate_signing_config_custom_prefix():
@@ -127,6 +128,41 @@ def test_generate_signing_config_no_prefix():
     # Should not have APP_ prefix
     assert "APP_SIGNING" not in result["gradle_config_kotlin"]
     assert "APP_SIGNING" not in result["gradle_properties_template"]
+
+
+def test_generate_signing_config_groovy_dual_source():
+    """Test that Groovy config has dual-source pattern"""
+    result = generate_signing_config(project_path="/fake/path")
+    groovy_config = result["gradle_config_groovy"]
+
+    # Check for dual-source pattern in Groovy
+    assert "System.getenv" in groovy_config
+    assert "project.findProperty" in groovy_config
+    assert "?:" in groovy_config  # Elvis operator in Groovy
+
+
+def test_generate_signing_config_groovy_prefix():
+    """Test that Groovy config uses prefixed variables with default APP_ prefix"""
+    result = generate_signing_config(project_path="/fake/path")
+    groovy_config = result["gradle_config_groovy"]
+
+    # Check for APP_ prefixed variables
+    assert "APP_SIGNING_KEY_STORE_PATH" in groovy_config
+    assert "APP_SIGNING_STORE_PASSWORD" in groovy_config
+    assert "APP_SIGNING_KEY_ALIAS" in groovy_config
+    assert "APP_SIGNING_KEY_PASSWORD" in groovy_config
+
+
+def test_generate_signing_config_groovy_custom_prefix():
+    """Test that Groovy config respects custom prefix"""
+    result = generate_signing_config(project_path="/fake/path", env_var_prefix="MYAPP_")
+    groovy_config = result["gradle_config_groovy"]
+
+    # Check for custom prefixed variables
+    assert "MYAPP_SIGNING_KEY_STORE_PATH" in groovy_config
+    assert "MYAPP_SIGNING_STORE_PASSWORD" in groovy_config
+    assert "MYAPP_SIGNING_KEY_ALIAS" in groovy_config
+    assert "MYAPP_SIGNING_KEY_PASSWORD" in groovy_config
 
 
 def test_create_github_secrets_guide():
