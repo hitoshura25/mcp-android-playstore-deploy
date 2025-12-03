@@ -13,13 +13,14 @@ async def test_server_initialization():
 
     # Check that tools are registered
     tools = await mcp.list_tools()
-    assert len(tools) == 9
+    assert len(tools) == 10
 
     tool_names = [tool.name for tool in tools]
 
     assert "analyze_android_project" in tool_names
     assert "generate_keystore" in tool_names
     assert "generate_signing_config" in tool_names
+    assert "setup_local_development" in tool_names
     assert "setup_service_account_guide" in tool_names
     assert "generate_github_workflow" in tool_names
     assert "validate_github_secrets" in tool_names
