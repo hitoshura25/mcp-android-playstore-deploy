@@ -477,10 +477,12 @@ def test_setup_local_development_basic():
         assert "ask_permission" in action_types
         assert "append_to_gitignore" in action_types
 
-        # Check validation commands
+        # Check validation commands (now structured data, not shell commands)
         assert len(result["validation_commands"]) == 2
-        assert "assembleDebug" in result["validation_commands"][0]
-        assert "bundleRelease" in result["validation_commands"][1]
+        assert result["validation_commands"][0]["command"] == "./gradlew"
+        assert "assembleDebug" in result["validation_commands"][0]["args"]
+        assert result["validation_commands"][1]["command"] == "./gradlew"
+        assert "bundleRelease" in result["validation_commands"][1]["args"]
 
         # Check keystore file was created
         keystore_path = result["keystore"]["path"]
@@ -565,3 +567,78 @@ def test_setup_local_development_actions_structure():
                 assert "file_path" in action
                 assert "content" in action
                 assert "skip_if_pattern_exists" in action
+
+
+# Error scenario tests for setup_local_development()
+
+
+def test_setup_local_development_invalid_project_path():
+    """Test setup_local_development with invalid project path"""
+    # Path traversal attempt - may be caught at validation or keystore generation
+    result = setup_local_development(project_path="../../etc/passwd")
+
+    assert result["success"] is False
+    assert "error" in result
+    # Error can be from path validation or keystore generation
+    assert "Invalid project path" in result["error"] or "Failed to generate keystore" in result["error"]
+
+
+def test_setup_local_development_empty_project_path():
+    """Test setup_local_development with empty project path"""
+    result = setup_local_development(project_path="")
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "project_path is required" in result["error"]
+
+
+def test_setup_local_development_invalid_keystore_alias():
+    """Test setup_local_development with invalid keystore alias"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Alias with special shell characters
+        result = setup_local_development(project_path=tmpdir, keystore_alias="test; rm -rf /")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid keystore_alias" in result["error"]
+
+
+def test_setup_local_development_invalid_env_var_prefix():
+    """Test setup_local_development with invalid env var prefix"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Lowercase letters not allowed in env var prefix
+        result = setup_local_development(project_path=tmpdir, env_var_prefix="myapp_")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid env_var_prefix" in result["error"]
+        assert "uppercase" in result["error"]
+
+
+def test_setup_local_development_invalid_password_length():
+    """Test setup_local_development with invalid password length"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Test negative length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=-1)
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid keystore_password_length" in result["error"]
+
+        # Test zero length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=0)
+
+        assert result["success"] is False
+        assert "error" in result
+
+        # Test extremely large length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=10000)
+
+        assert result["success"] is False
+        assert "error" in result
