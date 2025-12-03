@@ -614,6 +614,13 @@ def generate_signing_config(project_path: str, env_var_prefix: str = "APP_") -> 
     - Developers can use gradle.properties for local testing
     - CI/CD pipelines use environment variables (prioritized)
 
+    NOTE: For local development setup, consider using setup_local_development() instead.
+    That tool automatically:
+    - Generates a local-only development keystore (more secure)
+    - Auto-generates secure passwords
+    - Sets up ~/.gradle/gradle.properties (works for all projects)
+    - Separates local dev keystore from production keystore (security best practice)
+
     Args:
 
         project_path: Path to Android project
@@ -940,6 +947,262 @@ tasks.matching {{ it.name.contains("Release") }}.configureEach {{
             var_names["key_password"],
         ],
         "complete_example": complete_example,
+    }
+
+
+def setup_local_development(
+    project_path: str,
+    env_var_prefix: str = "APP_",
+    keystore_alias: str = "local-dev",
+    keystore_password_length: int = 16,
+) -> Dict[str, Any]:
+    """
+    Set up local development environment with local-only keystore.
+
+    Generates a local development keystore and prepares configuration
+    for ~/.gradle/gradle.properties. This keystore is for LOCAL DEVELOPMENT
+    ONLY and should never be used for production builds or shared with others.
+
+    Security Benefits:
+        - Production keystore stays secure in CI/CD only
+        - Each developer has unique local keystore
+        - Zero risk of production keystore leak
+        - Follows principle of least privilege
+
+    Args:
+        project_path: Absolute path to Android project root
+        env_var_prefix: Prefix for environment variables (default: "APP_")
+                       Example: "APP_" creates APP_SIGNING_KEY_STORE_PATH
+                       Use "" for no prefix
+        keystore_alias: Alias for local development keystore (default: "local-dev")
+        keystore_password_length: Length of auto-generated passwords (default: 16)
+
+    Returns:
+        Result dictionary with:
+            - success: Boolean indicating if setup completed
+            - keystore: Dictionary with keystore details
+            - gradle_user_home: Path to Gradle user home directory
+            - gradle_properties_path: Path to gradle.properties file
+            - actions: Structured actions array for AI agents to apply
+            - validation_commands: Commands to verify setup
+            - fallback_instructions: Manual setup instructions
+            - security_notes: Important security information
+
+    Example:
+        >>> result = setup_local_development(
+        ...     project_path="/path/to/project",
+        ...     env_var_prefix="MYAPP_"
+        ... )
+        >>> print(result["keystore"]["path"])
+        /path/to/project/keystore-local-dev.jks
+    """
+    from .gradle_utils import detect_gradle_user_home, generate_secure_password
+
+    # Validate inputs
+    if not project_path:
+        return {"success": False, "error": "project_path is required"}
+
+    # Validate project_path for security (path traversal, etc.)
+    try:
+        project_path_obj = validate_project_path(project_path, must_exist=False)
+    except (ValueError, FileNotFoundError) as e:
+        return {"success": False, "error": f"Invalid project path: {e}"}
+
+    # Validate keystore_alias (alphanumeric, hyphens, underscores only)
+    try:
+        keystore_alias = validate_string_input(
+            keystore_alias,
+            max_length=50,
+            min_length=1,
+            allowed_pattern=r"^[a-zA-Z0-9_-]+$",
+            field_name="keystore_alias",
+        )
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid keystore_alias: {e}"}
+
+    # Validate env_var_prefix (uppercase letters, numbers, underscores only)
+    try:
+        env_var_prefix = validate_string_input(
+            env_var_prefix,
+            max_length=50,
+            min_length=0,  # Can be empty string
+            allowed_pattern=r"^[A-Z0-9_]*$",
+            field_name="env_var_prefix",
+        )
+    except ValueError as e:
+        return {
+            "success": False,
+            "error": f"Invalid env_var_prefix: {e}. Must contain only uppercase letters, numbers, and underscores.",
+        }
+
+    # Validate keystore_password_length
+    try:
+        keystore_password_length = validate_numeric_input(
+            keystore_password_length, min_value=8, max_value=128, field_name="keystore_password_length"
+        )
+    except ValueError as e:
+        return {"success": False, "error": f"Invalid keystore_password_length: {e}"}
+
+    # Detect Gradle user home
+    gradle_user_home = detect_gradle_user_home()
+    gradle_properties_path = gradle_user_home / "gradle.properties"
+
+    # Generate keystore path in project directory
+    keystore_filename = "keystore-local-dev.jks"
+    keystore_path = project_path_obj / keystore_filename
+
+    # Auto-generate secure passwords
+    store_password = generate_secure_password(length=keystore_password_length)
+    key_password = generate_secure_password(length=keystore_password_length)
+
+    # Generate keystore using existing generate_keystore() function
+    keystore_result = generate_keystore(
+        output_path=str(keystore_path),
+        alias=keystore_alias,
+        key_password=key_password,
+        store_password=store_password,
+        validity_days=10950,  # 30 years
+        key_size=2048,
+        dname="CN=Local Development, OU=Development, O=Local, L=Local, ST=Local, C=US",
+    )
+
+    if not keystore_result.get("success"):
+        return {
+            "success": False,
+            "error": f"Failed to generate keystore: {keystore_result.get('error', 'Unknown error')}",
+        }
+
+    # Build var_names dict (same pattern as generate_signing_config)
+    var_names = {
+        "keystore_path": f"{env_var_prefix}SIGNING_KEY_STORE_PATH",
+        "store_password": f"{env_var_prefix}SIGNING_STORE_PASSWORD",
+        "key_alias": f"{env_var_prefix}SIGNING_KEY_ALIAS",
+        "key_password": f"{env_var_prefix}SIGNING_KEY_PASSWORD",
+    }
+
+    # Generate gradle.properties content with prefixed vars
+    gradle_properties_content = f"""# Android signing configuration for local development
+# Generated by MCP Android Play Store Deploy tool
+#
+# SECURITY WARNING: This is for LOCAL DEVELOPMENT ONLY
+# - Never commit this file to version control
+# - Never share these credentials
+# - Never use this keystore for production builds
+#
+# Production builds use separate keystore from CI/CD secrets
+
+{var_names["keystore_path"]}={keystore_path}
+{var_names["store_password"]}={store_password}
+{var_names["key_alias"]}={keystore_alias}
+{var_names["key_password"]}={key_password}
+"""
+
+    # Generate .gitignore content
+    gitignore_content = """# Local development keystores (never commit!)
+keystore-local-dev.jks
+*-local-dev.jks
+local-dev-*.jks
+
+# Gradle properties with secrets
+gradle.properties
+"""
+
+    # Build actions array with structured types
+    actions = [
+        {
+            "action_type": "write_keystore",
+            "file_path": str(keystore_path),
+            "description": "Generate local development keystore",
+            "completed": True,
+        },
+        {
+            "action_type": "ask_permission",
+            "question": f"May I update {gradle_properties_path} with local signing configuration?",
+            "file_path": str(gradle_properties_path),
+            "content_to_append": gradle_properties_content,
+            "description": "Add signing properties to user gradle home",
+            "backup_existing": True,
+        },
+        {
+            "action_type": "append_to_gitignore",
+            "file_path": str(project_path_obj / ".gitignore"),
+            "content": gitignore_content,
+            "description": "Ensure local keystores are gitignored",
+            "skip_if_pattern_exists": "keystore-local-dev.jks",
+        },
+    ]
+
+    # Validation commands - return as structured data, not shell commands
+    validation_commands = [
+        {
+            "command": "./gradlew",
+            "args": ["assembleDebug"],
+            "working_directory": str(project_path_obj),
+            "description": "Build debug variant",
+        },
+        {
+            "command": "./gradlew",
+            "args": ["bundleRelease", "--dry-run"],
+            "working_directory": str(project_path_obj),
+            "description": "Test release bundle generation",
+        },
+    ]
+
+    # Fallback instructions if user denies permission
+    fallback_instructions = f"""
+Local Development Keystore Setup
+=================================
+
+A local development keystore has been generated at:
+  {keystore_path}
+
+To complete setup, add the following to {gradle_properties_path}:
+
+{gradle_properties_content.strip()}
+
+Then verify the setup by running these commands in the project directory:
+  ./gradlew assembleDebug
+  ./gradlew bundleRelease --dry-run
+
+SECURITY NOTES:
+- This keystore is for LOCAL DEVELOPMENT ONLY
+- Never commit keystore files to version control
+- Never use this keystore for production builds
+- CI/CD uses separate production keystore from GitHub Secrets
+"""
+
+    # Security notes
+    security_notes = [
+        "This keystore is for LOCAL DEVELOPMENT ONLY",
+        "CI/CD uses separate production keystore from GitHub Secrets",
+        "Never commit keystore files to version control",
+        "Never share keystore credentials with others",
+        "Each developer should generate their own local keystore",
+        "Production keystore stays secure - only in CI/CD environment",
+    ]
+
+    return {
+        "success": True,
+        "keystore": {
+            "path": str(keystore_path),
+            "alias": keystore_alias,
+            "store_password": store_password,
+            "key_password": key_password,
+            "validity_days": 10950,
+        },
+        "gradle_user_home": str(gradle_user_home),
+        "gradle_properties_path": str(gradle_properties_path),
+        "actions": actions,
+        "validation_commands": validation_commands,
+        "fallback_instructions": fallback_instructions,
+        "security_notes": security_notes,
+        "next_steps": [
+            "Grant permission to update ~/.gradle/gradle.properties (recommended)",
+            "Or manually add properties to ~/.gradle/gradle.properties",
+            "Verify .gitignore includes keystore patterns",
+            "Run validation commands to test setup",
+            "Properties in ~/.gradle/gradle.properties work for all Android projects",
+        ],
     }
 
 

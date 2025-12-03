@@ -115,6 +115,60 @@ async def generate_signing_config(project_path: str, env_var_prefix: str = "APP_
 
 
 @mcp.tool()
+async def setup_local_development(
+    project_path: str,
+    env_var_prefix: str = "APP_",
+    keystore_alias: str = "local-dev",
+    keystore_password_length: int = 16,
+) -> str:
+    """Set up local development environment with local-only keystore
+
+    Generates a local development keystore and prepares configuration
+    for ~/.gradle/gradle.properties. This keystore is for LOCAL DEVELOPMENT
+    ONLY and should never be used for production builds or shared with others.
+
+    Security Benefits:
+        - Production keystore stays secure in CI/CD only
+        - Each developer has unique local keystore
+        - Zero risk of production keystore leak
+        - Follows principle of least privilege
+
+    Workflow:
+        1. Generates local development keystore (keystore-local-dev.jks)
+        2. Auto-generates secure random passwords
+        3. Prepares ~/.gradle/gradle.properties configuration
+        4. Returns structured actions for AI agents to apply
+        5. Provides validation commands to verify setup
+
+    Args:
+        project_path: Absolute path to Android project root
+
+        env_var_prefix: Prefix for environment variables (default: "APP_")
+                       Example: "APP_" creates APP_SIGNING_KEY_STORE_PATH
+                       Use "" for no prefix
+
+        keystore_alias: Alias for local development keystore (default: "local-dev")
+
+        keystore_password_length: Length of auto-generated passwords (default: 16)
+
+
+    Returns:
+        Result with keystore info, structured actions for AI agents to apply,
+        validation commands, and fallback instructions
+    """
+    result = generator.setup_local_development(
+        project_path=project_path,
+        env_var_prefix=env_var_prefix,
+        keystore_alias=keystore_alias,
+        keystore_password_length=keystore_password_length,
+    )
+    # Handle both sync and async business logic
+    if inspect.isawaitable(result):
+        result = await result
+    return str(result)
+
+
+@mcp.tool()
 async def setup_service_account_guide() -> str:
     """Provide interactive step-by-step guide for setting up Google Play Service Account
 

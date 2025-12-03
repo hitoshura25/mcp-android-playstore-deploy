@@ -7,6 +7,7 @@ from hitoshura25_mcp_android_playstore_deploy.generator import (
     analyze_android_project,
     generate_keystore,
     generate_signing_config,
+    setup_local_development,
     setup_service_account_guide,
     generate_github_workflow,
     create_github_secrets_guide,
@@ -442,3 +443,202 @@ def test_yaml_validity_with_optional_params():
         assert "jobs" in parsed
     except yaml.YAMLError as e:
         pytest.fail(f"Generated YAML is invalid: {e}")
+
+
+# NEW: Tests for setup_local_development()
+
+
+def test_setup_local_development_basic():
+    """Test basic setup_local_development functionality"""
+    import tempfile
+    import os
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = setup_local_development(project_path=tmpdir)
+
+        assert result["success"] is True
+        assert "keystore" in result
+        assert "actions" in result
+        assert "validation_commands" in result
+        assert "fallback_instructions" in result
+        assert "security_notes" in result
+        assert "next_steps" in result
+
+        # Check keystore details
+        assert result["keystore"]["alias"] == "local-dev"
+        assert len(result["keystore"]["store_password"]) == 16
+        assert len(result["keystore"]["key_password"]) == 16
+        assert result["keystore"]["validity_days"] == 10950
+
+        # Check actions structure
+        assert len(result["actions"]) >= 2
+        action_types = [a["action_type"] for a in result["actions"]]
+        assert "write_keystore" in action_types
+        assert "ask_permission" in action_types
+        assert "append_to_gitignore" in action_types
+
+        # Check validation commands (now structured data, not shell commands)
+        assert len(result["validation_commands"]) == 2
+        assert result["validation_commands"][0]["command"] == "./gradlew"
+        assert "assembleDebug" in result["validation_commands"][0]["args"]
+        assert result["validation_commands"][1]["command"] == "./gradlew"
+        assert "bundleRelease" in result["validation_commands"][1]["args"]
+
+        # Check keystore file was created
+        keystore_path = result["keystore"]["path"]
+        assert os.path.exists(keystore_path)
+
+
+def test_setup_local_development_custom_prefix():
+    """Test setup_local_development with custom prefix"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = setup_local_development(project_path=tmpdir, env_var_prefix="MYAPP_")
+
+        assert result["success"] is True
+
+        # Find the ask_permission action and check its content
+        ask_permission_action = next((a for a in result["actions"] if a["action_type"] == "ask_permission"), None)
+        assert ask_permission_action is not None
+
+        gradle_content = ask_permission_action["content_to_append"]
+        assert "MYAPP_SIGNING_KEY_STORE_PATH" in gradle_content
+        assert "MYAPP_SIGNING_STORE_PASSWORD" in gradle_content
+        assert "MYAPP_SIGNING_KEY_ALIAS" in gradle_content
+        assert "MYAPP_SIGNING_KEY_PASSWORD" in gradle_content
+
+        # Should not have APP_ prefix (check for variables starting with APP_ at line start)
+        assert "\nAPP_SIGNING" not in gradle_content
+        # Also check it doesn't start with APP_ (edge case for first line)
+        assert not gradle_content.strip().startswith("APP_SIGNING")
+
+
+def test_setup_local_development_gradle_home_detection():
+    """Test Gradle home directory detection"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = setup_local_development(project_path=tmpdir)
+
+        assert result["success"] is True
+        assert "gradle_user_home" in result
+        assert "gradle_properties_path" in result
+
+        # Should end with .gradle
+        assert result["gradle_user_home"].endswith(".gradle")
+        assert result["gradle_properties_path"].endswith("gradle.properties")
+
+        # gradle_properties_path should be inside gradle_user_home
+        assert result["gradle_user_home"] in result["gradle_properties_path"]
+
+
+def test_setup_local_development_actions_structure():
+    """Test that actions array has proper structure"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = setup_local_development(project_path=tmpdir)
+
+        assert result["success"] is True
+        actions = result["actions"]
+
+        # Check each action has required fields
+        for action in actions:
+            assert "action_type" in action
+            assert "description" in action
+
+            # write_keystore action is already completed
+            if action["action_type"] == "write_keystore":
+                assert "completed" in action
+                assert action["completed"] is True
+                assert "file_path" in action
+
+            # ask_permission action has specific fields
+            elif action["action_type"] == "ask_permission":
+                assert "question" in action
+                assert "file_path" in action
+                assert "content_to_append" in action
+                assert "backup_existing" in action
+                assert action["backup_existing"] is True
+
+            # append_to_gitignore action has specific fields
+            elif action["action_type"] == "append_to_gitignore":
+                assert "file_path" in action
+                assert "content" in action
+                assert "skip_if_pattern_exists" in action
+
+
+# Error scenario tests for setup_local_development()
+
+
+def test_setup_local_development_invalid_project_path():
+    """Test setup_local_development with invalid project path"""
+    # Path traversal attempt - may be caught at validation or keystore generation
+    result = setup_local_development(project_path="../../etc/passwd")
+
+    assert result["success"] is False
+    assert "error" in result
+    # Error can be from path validation or keystore generation
+    assert "Invalid project path" in result["error"] or "Failed to generate keystore" in result["error"]
+
+
+def test_setup_local_development_empty_project_path():
+    """Test setup_local_development with empty project path"""
+    result = setup_local_development(project_path="")
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "project_path is required" in result["error"]
+
+
+def test_setup_local_development_invalid_keystore_alias():
+    """Test setup_local_development with invalid keystore alias"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Alias with special shell characters
+        result = setup_local_development(project_path=tmpdir, keystore_alias="test; rm -rf /")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid keystore_alias" in result["error"]
+
+
+def test_setup_local_development_invalid_env_var_prefix():
+    """Test setup_local_development with invalid env var prefix"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Lowercase letters not allowed in env var prefix
+        result = setup_local_development(project_path=tmpdir, env_var_prefix="myapp_")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid env_var_prefix" in result["error"]
+        assert "uppercase" in result["error"]
+
+
+def test_setup_local_development_invalid_password_length():
+    """Test setup_local_development with invalid password length"""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Test negative length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=-1)
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "Invalid keystore_password_length" in result["error"]
+
+        # Test zero length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=0)
+
+        assert result["success"] is False
+        assert "error" in result
+
+        # Test extremely large length
+        result = setup_local_development(project_path=tmpdir, keystore_password_length=10000)
+
+        assert result["success"] is False
+        assert "error" in result
